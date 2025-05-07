@@ -1,0 +1,26 @@
+import json
+from typing import Dict, Any
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.ollama import OllamaChatCompletionClient
+
+model_client = OllamaChatCompletionClient(model="gemma3:4b")
+
+
+class PulseDetector(AssistantAgent):
+    def __init__(self):
+        super().__init__(
+            "pulse_detector",
+            model_client,
+            system_message=(
+                "You are PulseDetector. "
+                "Analyze minute OHLCV plus macro_report JSON and detect trading pulse. "
+                "Return JSON {pulse: 'long'|'short'|'none', strength: float}."
+            ),
+        )
+
+    async def detect(
+        self, minute_data: Dict[str, Any], macro_report: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        payload = {"minute": minute_data, "macro_report": macro_report}
+        res = await self.run(task=json.dumps(payload))
+        return json.loads(res.messages[-1].content)

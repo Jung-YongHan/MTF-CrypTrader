@@ -1,12 +1,10 @@
 import pandas as pd
+
 from agents.executor import TradeExecutor
+from agents.macro.macro_analysis_team import MacroAnalysisTeam
+from agents.micro.micro_analysis_team import MicroAnalysisTeam
 from agents.reflector import FeedbackReflector
 from data_preprocessor import DataPreprocessor
-from agents.macro.beta_strategist import BetaStrategist
-from agents.macro.exposure_limiter import ExposureLimiter
-from agents.macro.regime_analyzer import RegimeAnalyzer
-from agents.micro.order_tactician import OrderTactician
-from agents.micro.pulse_detector import PulseDetector
 
 
 class TradingSystem:
@@ -31,11 +29,8 @@ class TradingSystem:
         }
 
         self.data_preprocessor = DataPreprocessor()
-        self.regime_analyzer = RegimeAnalyzer()
-        self.beta_strategist = BetaStrategist()
-        self.exposure_limiter = ExposureLimiter()
-        self.pulse_detector = PulseDetector()
-        self.order_tactician = OrderTactician()
+        self.macro_analysis_team = MacroAnalysisTeam()
+        self.micro_analysis_team = MicroAnalysisTeam()
         self.trade_executor = TradeExecutor()
         self.feedback_reflector = FeedbackReflector()
 
@@ -54,8 +49,8 @@ class TradingSystem:
             # 4. 레코드 형태로 변환(List[Dict] 형태)
             records = tmp_df.to_dict(orient="records")
 
-            # 5. 매크로 데이터 및 차트를 활용하여 레짐 분석
-            regime_report = await self.regime_analyzer.analyze(records, fig)
+            # # 5. 매크로 시장 분석
+            regime_report = await self.macro_analysis_team.analyze(records, fig)
             print(f"Regime Report: {regime_report}")
         #     beta = await self.beta_strategist.select(regime)
         #     limit = await self.exposure_limiter.limit(regime)

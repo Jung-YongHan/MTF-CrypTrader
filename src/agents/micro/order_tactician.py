@@ -1,16 +1,18 @@
 import json
-from typing import Dict, Any
+from os import getenv
+from typing import Any, Dict
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-
-model_client = OllamaChatCompletionClient(model="gemma3:4b")
 
 
 class OrderTactician(AssistantAgent):
     def __init__(self):
         super().__init__(
             "order_tactician",
-            model_client,
+            model_client=OllamaChatCompletionClient(
+                model=getenv("ORDER_TACTICIAN_MODEL")
+            ),
             system_message=(
                 "You are OrderTactician. "
                 "Given pulse_report JSON and portfolio JSON, "

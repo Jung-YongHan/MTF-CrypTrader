@@ -1,8 +1,9 @@
-import asyncio
-from src.trading_system import TradingSystem
+from src.trading_system import create_system
 
-
+app = create_system(
+    regime="bull",
+    coin="btc",
+    micro_tick=15,
+)
 if __name__ == "__main__":
-    asyncio.run(TradingSystem("bull", "BTC").run())
-    # asyncio.run(TradingSystem("bear", "BTC").run())
-    # asyncio.run(TradingSystem("total", "BTC").run())
+    app.run()

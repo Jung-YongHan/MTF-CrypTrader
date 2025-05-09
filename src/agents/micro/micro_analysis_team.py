@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 
-from agents.micro.order_tactician import OrderTactician
-from agents.micro.pulse_detector import PulseDetector
+from src.agents.micro.order_tactician import OrderTactician
+from src.agents.micro.pulse_detector import PulseDetector
 
 
 class MicroAnalysisTeam:

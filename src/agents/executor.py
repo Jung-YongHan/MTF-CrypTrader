@@ -1,16 +1,18 @@
 import json
-from typing import Dict, Any
+from os import getenv
+from typing import Any, Dict
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-
-model_client = OllamaChatCompletionClient(model="gemma3:4b")
 
 
 class TradeExecutor(AssistantAgent):
     def __init__(self):
         super().__init__(
             "trade_executor",
-            model_client,
+            model_client=OllamaChatCompletionClient(
+                model=getenv("TRADE_EXECUTOR_MODEL")
+            ),
             system_message=(
                 "You are TradeExecutor. "
                 "Execute trades based on order_report JSON. "

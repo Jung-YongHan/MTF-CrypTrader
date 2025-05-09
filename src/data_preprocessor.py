@@ -1,8 +1,9 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-import talib
-import pandas as pd
 import os
+from typing import Any, Dict, Tuple
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import talib
 
 
 class DataPreprocessor:
@@ -23,13 +24,28 @@ class DataPreprocessor:
             columns=["datetime", "open", "high", "low", "close", "volume"]
         )
 
-    def update(self, row: dict, timeframe: str) -> pd.DataFrame:
+    def update_and_get_data(
+        self, row: dict, timeframe: str, save_path: str
+    ) -> Tuple[Dict, Any]:
+        full_df = self._update(row, timeframe)
+
+        if timeframe == "macro":
+            window_df = full_df.tail(60)
+        else:
+            window_df = full_df.tail(20)
+
+        fig = self._draw_close_chart(
+            df=window_df, timeframe=timeframe, save_path=save_path, return_fig=True
+        )
+        tmp_df = full_df.iloc[[-1]].dropna(axis=1).to_dict(orient="records")[0]
+        return tmp_df, fig
+
+    def _update(self, row: dict, timeframe: str) -> pd.DataFrame:
         """
         row: dict, 새로운 데이터 한 건
         timeframe: "macro" (일봉) 또는 "micro" (분봉)
         """
         row_df = pd.DataFrame([row])
-
         if timeframe == "macro":
             self.df_macro = pd.concat([self.df_macro, row_df], ignore_index=True)
             self._compute_macro_indicators()
@@ -103,21 +119,19 @@ class DataPreprocessor:
         df["mom"] = talib.MOM(close, timeperiod=5)
         # 캔들패턴은 필요시 추가
 
-    def draw_close_chart(self, timeframe="macro", save_path=None, return_fig=False):
+    def _draw_close_chart(
+        self,
+        df: pd.DataFrame,
+        timeframe: str = "macro",
+        save_path: str = None,
+        return_fig: bool = False,
+    ):
         """
         현재까지 누적된 종가 시계열을 선 그래프로 표시
         - save_path: 파일로 저장할 경로(str), None이면 저장하지 않음
         - return_fig: True면 Figure 객체 반환 (멀티모달 에이전트 전달용)
         """
-        if timeframe == "macro":
-            df = self.df_macro
-        elif timeframe == "micro":
-            df = self.df_micro
-        else:
-            raise ValueError("timeframe은 'macro' 또는 'micro'만 가능합니다.")
-
-        if df.empty or "close" not in df.columns or df["close"].isnull().all():
-            print(f"No data to plot for {timeframe} timeframe.")
+        if df.empty or df["close"].isnull().all():
             if return_fig:
                 fig, ax = plt.subplots(figsize=(8, 4))
                 ax.text(
@@ -139,22 +153,15 @@ class DataPreprocessor:
         ax.grid(True)
         ax.legend()
         fig.tight_layout()
-
-        # x축 라벨이 많을 때 자동 회전 및 간격 조정
         fig.autofmt_xdate(rotation=45)
-        # x축 눈금 간격 자동 조정 (matplotlib >=3.1)
         ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=10, prune="both"))
 
         if save_path:
+            directory = os.path.dirname(save_path)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
             try:
-                # 파일 저장 경로의 디렉터리 추출
-                directory = os.path.dirname(save_path)
-                # 디렉터리가 존재하지 않고, 디렉터리 경로가 있는 경우 생성
-                if directory and not os.path.exists(directory):
-                    os.makedirs(directory, exist_ok=True)
-                    print(f"Directory created: {directory}")
                 fig.savefig(save_path)
-                print(f"Chart saved to {save_path}")
             except Exception as e:
                 print(f"Error saving chart to {save_path}: {e}")
 

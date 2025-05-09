@@ -1,16 +1,18 @@
 import json
-from typing import Dict, Any
+from os import getenv
+from typing import Any, Dict
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-
-model_client = OllamaChatCompletionClient(model="gemma3:4b")
 
 
 class PulseDetector(AssistantAgent):
     def __init__(self):
         super().__init__(
             "pulse_detector",
-            model_client,
+            model_client=OllamaChatCompletionClient(
+                model=getenv("PULSE_DETECTOR_MODEL")
+            ),
             system_message=(
                 "You are PulseDetector. "
                 "Analyze minute OHLCV plus macro_report JSON and detect trading pulse. "

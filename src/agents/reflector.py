@@ -1,16 +1,18 @@
 import json
-from typing import Dict, Any
+from os import getenv
+from typing import Any, Dict
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-
-model_client = OllamaChatCompletionClient(model="gemma3:4b")
 
 
 class FeedbackReflector(AssistantAgent):
     def __init__(self):
         super().__init__(
             "feedback_reflector",
-            model_client,
+            model_client=OllamaChatCompletionClient(
+                model=getenv("FEEDBACK_REFLECTOR_MODEL")
+            ),
             system_message=(
                 "You are FeedbackReflector. "
                 "Based on trade_summary JSON (order + result), "

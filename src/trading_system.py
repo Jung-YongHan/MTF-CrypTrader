@@ -77,11 +77,11 @@ class TradingSystem:
                 price_data=price_data, fig=fig
             )
 
-            if not macro_report["exposure"] > 0.0:
+            print(f"Macro Report: {macro_report}")
+
+            if abs(macro_report["exposure"]) < 1e-8:
                 print("No exposure, skipping micro analysis.")
                 continue
-
-            print(f"Macro Report: {macro_report}")
 
             # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨
             df_micro = self.get_micro_data_for_day(macro_tick=macro_tick)
@@ -91,9 +91,10 @@ class TradingSystem:
             micro_report = None
             for index, micro_tick in df_micro.iterrows():
                 micro_dict = micro_tick.to_dict()
-                print(f"## {micro_tick['datetime']} 캔들 ##")
 
-                self.portfolio_manager.update_portfolio_ratio(price=micro_dict["open"])
+                self.portfolio_manager.update_portfolio_ratio(
+                    datetime=micro_dict["datetime"], price=micro_dict["open"]
+                )
 
                 # 5.1 시가에 대해서 매도/매수/보유 결정
                 await self.trade_executor.execute(
@@ -101,6 +102,8 @@ class TradingSystem:
                     coin=self.coin,
                     micro_report=micro_report,
                 )
+
+                print(f"## {micro_tick['datetime']} 캔들 ##")
 
                 # 6. 현재까지의 마이크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
                 price_data, fig = self.data_preprocessor.update_and_get_price_data(
@@ -125,22 +128,12 @@ class TradingSystem:
         end_time = time()
         print(f"Total time taken for backtest: {end_time - start_time:.2f} seconds")
 
-        self.portfolio_manager.sell_all(
+        await self.portfolio_manager.sell_all(
             price=self.df_macro.iloc[-1]["close"],
         )
 
         print("Backtest completed.")
-        print(
-            f"Final portfolio: {self.portfolio_manager.get_portfolio()}, "
-            f"Final portfolio ratio: {self.portfolio_manager.get_portfolio_ratio()}"
-        )
-        # 최초 투자 금액 대비 수익률 계산
-        profit = (
-            (self.portfolio_manager.get_portfolio()["cash"] - self.initial_balance)
-            / self.initial_balance
-            * 100
-        )
-        print(f"최종 수익률: {profit:.3f}%")
+        print(f"Portfolio performance: {self.portfolio_manager.get_performance()}")
 
     def get_micro_data_for_day(self, macro_tick) -> pd.DataFrame:
         """

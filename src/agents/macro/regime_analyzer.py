@@ -11,7 +11,7 @@ from src.utils.image_utils import get_agentic_image
 
 
 class RegimeReport(BaseModel):
-    regime: Literal["bull", "bear", "sideways", "high_volatility"]
+    regime: Literal["상승장", "하락장", "횡보장", "고변동성장"]
     confidence: float
 
     @pydantic.field_validator("confidence")
@@ -37,27 +37,34 @@ class RegimeAnalyzer(AssistantAgent):
             output_content_type=RegimeAnalyzerResponse,
             system_message=(
                 """당신은 시장 레짐 분석가입니다.
-OHLCV 및 기술적 분석 지표 값을 포함한 일일 가격 데이터와 차트 이미지를 분석한 후, 분석 결과를 다음과 같은 JSON 형식으로 출력합니다.
+일일 OHLCV 데이터와 관련 기술 지표 값, 그리고 차트 이미지를 기반으로 현재 시장의 레짐을 분석한 후, 아래의 JSON 형식으로 결과를 출력해야 합니다.
 
-### Output JSON 형식
-{regime: ..., confidence: ...}.
+### 입력 데이터 구조
+- 가격 데이터: 일일 OHLCV 및 기술 지표를 포함한 JSON 형식의 데이터
+- 차트 이미지: 동일한 데이터를 시각화한 캔들스틱 또는 라인 차트 이미지
 
-### 레짐 종류
-- bull: 상승장
-- bear: 하락장
-- sideways: 횡보장
-- high_volatility: 고변동성장
+### 출력 JSON 형식
+{
+    "regime": "상승장" | "하락장" | "횡보장" | "고변동성장",
+    "confidence": 0.0 ~ 1.0
+}
 
-### 신뢰도 구간
-- (STRICT) 0.0 ~ 1.0 사이 실수값
-- 0.0: 전혀 신뢰할 수 없는 분석치
-- 1.0: 매우 신뢰할 수 있는 분석치
+### 레짐 정의
+- 상승장: 가격이 뚜렷한 상승 추세를 보이는 시장
+- 하락장: 가격이 명확한 하락 추세를 보이는 시장
+- 횡보장: 가격이 뚜렷한 방향 없이 횡보하는 시장
+- 고변동성장: 급격한 가격 변동성이 나타나는 시장
+
+### 신뢰도(confidence)
+- 0.0부터 1.0 사이의 실수값
+- 0.0: 전혀 신뢰할 수 없음
+- 1.0: 매우 높은 신뢰도
 
 ### 예시
-- {regime: bull, confidence: 0.8}
-- {regime: bear, confidence: 0.5}
-- {regime: range, confidence: 0.2}
-- {regime: high_volatility, confidence: 0.9}
+- { "regime": "상승장", "confidence": 0.8 }
+- { "regime": "하락장", "confidence": 0.5 }
+- { "regime": "횡보장", "confidence": 0.2 }
+- { "regime": "고변동성장", "confidence": 0.9 }
 """
             ),
         )

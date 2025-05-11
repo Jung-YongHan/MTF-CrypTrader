@@ -19,18 +19,15 @@ class TradeExecutor:
         order_type = order_report["order"]
         amount = order_report["amount"]  # 주문 비율
 
-        price = price_data.get("open")  # 시가
-        if price is None:
-            raise ValueError("Price data does not contain 'open' key.")
-
-        PortfolioManager.get_instance().update_portfolio_by_trade(
-            price=price,
+        await PortfolioManager.get_instance().update_portfolio_by_trade(
+            price_data=price_data,
             coin=coin,
             amount=amount,
             order_type=order_type,
         )
 
         print(
-            f"Trade executed: {order_type} {amount} of {coin} at price {price}. "
-            f"New portfolio: {PortfolioManager.get_instance().portfolio}"
+            f"Trade executed: {order_type} {amount} of {coin} at price {price_data.get("open")}."
+            f"New portfolio: {PortfolioManager.get_instance().get_portfolio()}"
+            f"New portfolio ratio: {PortfolioManager.get_instance().get_portfolio_ratio()}"
         )

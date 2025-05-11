@@ -40,18 +40,16 @@ class ExposureLimiter(AssistantAgent):
             output_content_type=RegimeAnalyzerResponse,
             system_message=(
                 """당신은 노출 한도 관리자입니다.
-regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfolio ratio 현황을 기반으로 자산 투자 한도를 제한해야 합니다.
-이때 제한하는 자산은 현금을 제외한 코인 자산에 대해서 제한합니다.
-예시로, 자산 투자 한도가 0.5인 경우, 자산의 절반을 코인에 투자할 수 있습니다.
+주어진 시장 분석 보고서(regime_report), 가격 데이터(price_data), 그리고 현재 포트폴리오 비율(portfolio_ratio)를 기반으로, 코인 자산에 대한 투자 노출 한도(exposure)를 결정해야 합니다.
 
-### 입력 JSON 형식
+### 입력 데이터 구조
 {
-    regime_report: {
-        regime: bull | bear | sideways | high_volatility,
-        confidence: 0‑1,   // regime classifier confidence
+    "regime_report": {
+        "regime": "상승장" | "하락장" | "횡보장" | "고변동성장",
+        "confidence": 0.0 ~ 1.0
     },
-    price_data: {
-        "timestamp": 2025-01-01 09:00:00,
+    "price_data": {
+        "timestamp": "2025-01-01 09:00:00",
         "open": 10000,
         "high": 11000,
         "low": 9000,
@@ -59,25 +57,37 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
         "volume": 1000,
         ...
     },
-    portfolio_ratio: {
+    "portfolio_ratio": {
         "cash": 0.6,
         "btc": 0.4
-    },
+    }
 }
 
-### 출력 JSON 형식
-{exposure: ...} 
+- regime_report: 시장의 현재 상태와 그에 대한 확신도를 나타냅니다.
+- price_data: OHLCV 및 기타 기술적 지표를 포함한 일일 가격 데이터입니다.
+- portfolio_ratio: 현재 포트폴리오에서 현금과 코인 자산의 비율을 나타냅니다.
 
-### 노출 제한 구간
-- (STRICT) 0 ~ 1 사이 실수값, 소수점 2자리까지 허용
-- 0: 자산의 전부를 현금으로 보유
-- 0.5: 자산의 절반을 코인으로 보유
-- 1: 자산의 전부를 코인으로 투자
+### 출력 데이터 구조
+{
+    "exposure": 0.0 ~ 1.0
+}
+
+- exposure: 코인 자산에 대한 투자 비율을 나타내는 0.0에서 1.0 사이의 실수값입니다. 소수점은 최대 두 자리까지 허용됩니다.
+
+
+### 노출 한도 정의
+- 0.0: 전체 자산을 현금으로 보유 (코인 투자 없음)
+- 0.5: 전체 자산의 50%를 코인에 투자
+- 1.0: 전체 자산을 코인에 투자
+
+###  결정 지침
+1. **시장 상태(regime)**와 **확신도(confidence)**를 고려하여 적절한 노출 한도를 결정합니다.
+2. **가격 데이터(price_data)**의 기술적 지표를 분석하여 시장의 변동성과 추세를 평가합니다.
+3. **현재 포트폴리오 비율(portfolio_ratio)**을 참고하여 노출 한도를 조정합니다.
+4. 최종 결정된 exposure 값은 반드시 0.0에서 1.0 사이의 실수값이어야 하며, 소수점은 최대 두 자리까지 허용됩니다.
 
 ### 예시
-- {exposure: 0.5}
-- {exposure: 0.2}
-- {exposure: 0.8}
+{ "exposure": 0.5 }
 """
             ),
         )
@@ -98,7 +108,7 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
         )
         message = [base_msg]
 
-        for _ in range(5):  # 최대 5회 반복
+        while True:  # 최대 5회 반복
             try:
                 response = await self.run(task=message)
                 content = response.messages[-1].content
@@ -118,9 +128,8 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
                         "JSON schema validation failed:"
                         f"{e}\n\n"
                         "규칙:\n"
-                        "- exposure는 0.00~1.00 사이 소수점 두 자리.\n"
+                        "- exposure는 0.0 ~ 1.0 사이 소수점 두 자리.\n"
                     ),
                     source="validator",
                 )
                 message.append(feedback)
-        raise RuntimeError("ExposureLimiter: too many invalid responses")

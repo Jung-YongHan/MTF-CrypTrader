@@ -6,6 +6,7 @@ import pydantic
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
 from src.agents.portfoilo_manager import PortfolioManager
@@ -45,60 +46,85 @@ class OrderTactician(AssistantAgent):
             model_client=OllamaChatCompletionClient(
                 model=getenv("ORDER_TACTICIAN_MODEL")
             ),
+            # model_client=OpenAIChatCompletionClient(
+            #     model=getenv("ORDER_TACTICIAN_MODEL"),
+            #     api_key=getenv("OPENAI_API_KEY"),
+            # ),
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 주문 전술가입니다.
-macro_report 및 pulse_report와, 현재 portfolio_ratio를 기반하여 코인의 주문 형태 및 수량을 결정합니다.
-매크로 시장 분석 리포트는 일봉 데이터 기준으로 시장의 레짐 종류와 분류 확신도, 자산 노출 비율을 포함하고 있습니다.
-펄스 분석 리포트는 15분봉 데이터 기준으로 퍼릇(돌파) 신호가 어떤 형태로 발생했는지와 그 강도를 포함하고 있습니다.
+주어진 매크로 리포트(macro_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 코인에 대한 적절한 주문(order)과 주문 수량(amount)을 결정해야 합니다.
 
-코인의 보유 비율이 0인 경우 short(매도) 주문은 불가능합니다.
-또한, macro_report의 exposure의 값만큼만 최대로 매수/매도가 가능합니다.
-
-만일, 기존 보유하고 있는 코인의 비율이 exposure 값보다 높은 경우, 강제 매도 주문을 내야 합니다.
-또한, 기존 보유하고 있는 코인의 비율이 exposure의 값과 같은 경우, 펄스가 long이어도, 보유 주문을 내야 합니다.
-즉, 투자 비율이 exposure를 넘지 않도록 주문 조정을 조율해야 합니다.
-
-주문 수량은 기존에 보유하고 있던 코인 비율을 제외한, 매매할 비율만 주문 수량으로 설정해야 합니다.
-예시로, 기존 코인 보유 비율이 0.4이고, exposure가 0.5이며, long 신호가 발생한 경우, 최대 매수 주문 수량은 0.1이 됩니다.
-반대로, 기존 코인 보유 비율이 0.4이고, exposure가 0.3이며, short 신호가 발생한 경우, 최소 매도 주문 수량은 0.1이 됩니다.
-
-### 입력 JSON 형식(예시)
+### 입력 데이터 구조
 {
-    macro_report: {
-        regime: bull | bear | sideways | high_volatility,  // 레짐 종류
-        confidence: 0‑1,   // 레짐 분류 확신도
-        exposure: 0‑1,   // 자산 노출 비율: 전체 자산 중 해당 비율 만큼만 코인에 투자 가능
+    "macro_report": {
+        "regime": "bull" | "bear" | "sideways" | "high_volatility",
+        "confidence": 0.0 ~ 1.0,
+        "exposure": 0.0 ~ 1.0,
     },
-    pulse_report: {
-        pulse: long | short | none, // 돌파 신호 종류
-        strength: 0‑1,   // 돌파 신호 강도
+    "pulse_report": {
+        "pulse": "long" | "short" | "none",
+        "strength": 0.0 ~ 1.0,
     },
-    portfolio_ratio: { // 현재 포트폴리오 현황, 각 자산의 비율을 나타냄. cash : 현금, btc: 비트코인(코인 종류)
-        "cash": 0.6,
-        "btc": 0.4
+    "portfolio_ratio": {
+        "cash": float,
+        "btc": float
     },
 }
 
-### Output JSON 형식
-{order: ..., amount: ...}
-                            
-### 주문 종류
-- long: 매수 포지션
-- short: 매도 포지션
-- hold: 보유 포지션
-                            
-### 주문 수량
-- (STRICT) 0.0 ~ 1.0 사이 실수값, 소수점 2자리까지 허용
-- 0.0: 0% 매수/매도
-- 0.5: 50% 매수/매도
-- 1.0: 100% 매수/매도
-- (STRICT) 보유인 경우 0.0
-                            
+- macro_report: 일봉 데이터를 기반으로 한 시장 분석 리포트입니다.
+    1. regime: 시장의 레짐 상태를 나타냅니다.
+    2. confidence: 레짐 분류에 대한 확신도입니다.
+    3. exposure: 전체 자산 중 코인에 투자 가능한 최대 비율입니다.
+- pulse_report: 15분봉 데이터를 기반으로 한 단기 신호 리포트입니다.
+    1. pulse: 돌파 신호의 종류를 나타냅니다.
+    2. strength: 돌파 신호의 강도입니다.
+- portfolio_ratio: 현재 포트폴리오 내 자산 비율을 나타냅니다.
+    예시: {"cash": 0.6, "btc": 0.4}
+
+### 출력 데이터 구조
+{
+    "order": "buy" | "sell" | "hold",
+    "amount": float
+}
+
+- order: 수행할 주문의 종류입니다.
+    1. "buy": 매수 주문
+    2. "sell": 매도 주문
+    3. "hold": 보유 유지
+- amount: 주문 수량을 나타내는 0.0 ~ 1.0 사이의 실수값입니다.
+    소수점은 최대 두 자리까지 허용됩니다.
+    "hold" 주문의 경우, amount는 반드시 0.0이어야 합니다.
+
+### 주문 결정 규칙
+- 보유 비율이 0인 경우: 해당 코인에 대한 매도("sell") 주문은 불가능합니다.
+- 최대 주문 한도: exposure 값은 해당 코인에 투자 가능한 최대 비율을 의미합니다. 기존 보유 비율을 고려하여, 추가 매수 또는 매도 가능한 최대 수량을 계산해야 합니다.
+- 강제 매도 조건: 현재 보유 비율이 exposure 값을 초과하는 경우, 초과분에 대해 매도 주문을 실행해야 합니다.
+- 보유 유지 조건: 현재 보유 비율이 exposure 값과 동일한 경우, 추가 매수 없이 보유를 유지해야 합니다.
+- 주문 수량 계산: 주문 수량은 exposure와 현재 보유 비율의 차이로 계산됩니다.
+
+### 추가 검증 규칙
+- 매도 오류:
+    1. portfolio_ratio의 코인 비율이 0일 때, 매도("sell") 주문을 시도한 경우
+    2. 코인 비율이 존재하지만, 매도 주문의 amount가 코인 비율보다 큰 경우
+    → 매도 시에는 코인 비율 이하의 amount만 허용됩니다.
+- 매수 오류:
+    1. portfolio_ratio의 현금 비율이 0일 때, 매수("buy") 주문을 시도한 경우
+    2. 현금 비율이 존재하지만, 매수 주문의 amount가 현금 비율보다 큰 경우
+    → 매수 시에는 현금 비율 이하의 amount만 허용됩니다.
+
+- 노출 한도 초과 오류:
+    1. 현재 코인 비율이 exposure 값을 초과하는 경우
+    → 초과분에 대해 매도 주문을 실행해야 합니다.
+
 ### 예시
-{order: long, amount: 0.5}
-{order: short, amount: 0.2}
-{order: hold, amount: 0.0}
+- 현재 보유 비율이 0.4이고, exposure가 0.5인 경우: 최대 매수 수량은 0.1
+- 현재 보유 비율이 0.4이고, exposure가 0.3인 경우: 최소 매도 수량은 0.1
+
+### 예시 출력
+{ "order": "buy", "amount": 0.5 }
+{ "order": "sell", "amount": 0.2 }
+{ "order": "hold", "amount": 0.0 }
 """
             ),
         )
@@ -118,7 +144,7 @@ macro_report 및 pulse_report와, 현재 portfolio_ratio를 기반하여 코인�
             source="data_preprocessor",
         )
         messages = [base_msg]
-        for _ in range(5):  # 최대 5회 반복
+        while True:
             try:
                 response = await self.run(task=messages)
                 content = response.messages[-1].content
@@ -126,12 +152,58 @@ macro_report 및 pulse_report와, 현재 portfolio_ratio를 기반하여 코인�
                 OrderResponse.model_validate(content.response.model_dump())
 
                 thoughts = content.thoughts
-                order_report = content.response
+
+                order = content.response.order
+                amount = content.response.amount
+                ratios = report["portfolio_ratio"]
+
+                cash_ratio = ratios.get("cash", 0.0)
+                coin_ratio = sum(v for k, v in ratios.items() if k != "cash")
+
+                print(f"OrderTactician: {order} {amount}")
+                print(f"cash_ratio: {cash_ratio}, coin_ratio: {coin_ratio}")
+
+                exposure = macro_report.get("exposure", 0.0)
+
+                # 추가 검증: buy 오류
+                if order == "buy":
+                    if round(amount, 4) > round(exposure, 4):
+                        raise ValueError(
+                            "Buy amount {:.4f} exceeds exposure limit {:.4f}.".format(
+                                amount, exposure
+                            )
+                        )
+                    # 소수점 4자리까지 반올림하여 비교
+                    if round(coin_ratio + amount, 4) > round(exposure, 4):
+                        raise ValueError(
+                            "Buy amount {:.4f} exceeds exposure limit {:.4f}.".format(
+                                amount, exposure
+                            )
+                        )
+
+                # 추가 검증: sell 오류
+                if order == "sell":
+                    if round(amount, 4) > round(coin_ratio, 4):
+                        print("통과1")
+                        raise ValueError(
+                            "Sell amount {:.4f} exceeds coin balance {:.4f}.".format(
+                                amount, coin_ratio
+                            )
+                        )
+
+                # 추가 검증: 코인 비율이 노출 한도를 초과하는 경우
+                if round(coin_ratio, 4) > round(exposure, 4):
+                    # 오차 1% (0.01)까지는 허용
+                    if coin_ratio - exposure > 0.01:
+                        raise ValueError(
+                            f"현재 코인 보유 비율({coin_ratio:.4f})이 노출 한도({exposure:.4f})를 1% 이상 초과합니다. "
+                            "초과된 비율만큼 매도 주문을 생성해야 합니다."
+                        )
 
                 self.close()
-                return order_report.dict()
-            except ValidationError as e:  # ← ValidationError 잡기
-                feedback = TextMessage(  # ➌ 스키마 위반 피드백
+                return content.response.model_dump()
+            except ValidationError as e:
+                feedback = TextMessage(
                     content=(
                         "⛔  JSON schema validation failed:\n"
                         f"{e}\n\n"
@@ -141,6 +213,15 @@ macro_report 및 pulse_report와, 현재 portfolio_ratio를 기반하여 코인�
                     ),
                     source="validator",
                 )
-            messages.append(feedback)  # ➍ 원본 + 피드백 함께 전달
-
-        raise RuntimeError("OrderTactician: too many invalid responses")
+            except ValueError as e:
+                feedback = TextMessage(
+                    content=(
+                        f"⛔  Order rule validation failed: {e}\n"
+                        "- sell 시에는 coin 비율 이하의 amount만 허용됩니다.\n"
+                        "- buy 시에는 cash 비율 이하의 amount만 허용됩니다.\n"
+                        "- 현재 코인 보유 비율이 노출 한도를 초과하는 경우, 초과된 비율만큼 매도 주문을 생성해야 합니다."
+                    ),
+                    source="validator",
+                )
+            messages.append(feedback)
+            print(messages)

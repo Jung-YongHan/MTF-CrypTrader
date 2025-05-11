@@ -4,7 +4,9 @@ from typing import Any, Dict, Literal
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import MultiModalMessage, TextMessage
+from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from matplotlib import pyplot as plt
 from pydantic import BaseModel, ValidationError
 
 from src.utils.image_utils import get_agentic_image
@@ -87,7 +89,8 @@ class PulseDetector(AssistantAgent):
                 thoughts = content.thoughts
                 pulse_report = content.response
 
-                self.close()
+                await self.on_reset(cancellation_token=CancellationToken())
+                plt.close(fig)
                 return pulse_report.dict()
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(

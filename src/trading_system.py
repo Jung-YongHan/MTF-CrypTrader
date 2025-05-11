@@ -6,10 +6,10 @@ from dotenv import load_dotenv
 
 from src.agents.macro.macro_analysis_team import MacroAnalysisTeam
 from src.agents.micro.micro_analysis_team import MicroAnalysisTeam
-from src.agents.portfoilo_manager import PortfolioManager
-from src.agents.reflector import FeedbackReflector
-from src.agents.trade_executor import TradeExecutor
 from src.data_preprocessor import DataPreprocessor
+from src.portfoilo_manager import PortfolioManager
+from src.record_manager import RecordManager
+from src.trade_executor import TradeExecutor
 
 
 class TradingSystem:
@@ -54,7 +54,16 @@ class TradingSystem:
         self.macro_analysis_team = MacroAnalysisTeam()
         self.micro_analysis_team = MicroAnalysisTeam()
         self.trade_executor = TradeExecutor()
-        self.feedback_reflector = FeedbackReflector()
+
+        self.macro_recode_manager = RecordManager(
+            coin=coin, regime=regime, report_type="macro"
+        )
+        self.micro_recode_manager = RecordManager(
+            coin=coin, regime=regime, report_type="micro"
+        )
+        self.trade_recode_manager = RecordManager(
+            coin=coin, regime=regime, report_type="trade"
+        )
 
     async def run(self) -> None:
         # 1. 매크로 단위 데이터를 순회
@@ -78,6 +87,9 @@ class TradingSystem:
             )
 
             print(f"Macro Report: {macro_report}")
+            macro_report_tmp = macro_report.copy()
+            macro_report_tmp["datetime"] = macro_tick["datetime"]
+            self.macro_recode_manager.record_step(macro_report_tmp)
 
             if abs(macro_report["exposure"]) < 1e-8:
                 print("No exposure, skipping micro analysis.")
@@ -92,9 +104,7 @@ class TradingSystem:
             for index, micro_tick in df_micro.iterrows():
                 micro_dict = micro_tick.to_dict()
 
-                self.portfolio_manager.update_portfolio_ratio(
-                    datetime=micro_dict["datetime"], price=micro_dict["open"]
-                )
+                self.portfolio_manager.update_portfolio_ratio(price_data=micro_dict)
 
                 # 5.1 시가에 대해서 매도/매수/보유 결정
                 await self.trade_executor.execute(
@@ -102,6 +112,12 @@ class TradingSystem:
                     coin=self.coin,
                     micro_report=micro_report,
                 )
+
+                trade_report = {
+                    "datetime": micro_dict["datetime"],
+                    **self.portfolio_manager.get_performance(),
+                }
+                self.trade_recode_manager.record_step(trade_report)
 
                 print(f"## {micro_tick['datetime']} 캔들 ##")
 
@@ -120,6 +136,14 @@ class TradingSystem:
                 )
 
                 print(f"Micro Report: {micro_report}")
+                micro_report_tmp = {
+                    "datetime": micro_tick["datetime"],
+                    "pulse": micro_report["pulse_report"]["pulse"],
+                    "strength": micro_report["pulse_report"]["strength"],
+                    "order": micro_report["order_report"]["order"],
+                    "amount": micro_report["order_report"]["amount"],
+                }
+                self.micro_recode_manager.record_step(micro_report_tmp)
 
             macro_end_time = time()
             print(

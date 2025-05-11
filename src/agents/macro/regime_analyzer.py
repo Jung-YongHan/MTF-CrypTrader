@@ -4,7 +4,9 @@ from typing import Any, Dict, Literal
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import MultiModalMessage
+from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from matplotlib import pyplot as plt
 from pydantic import BaseModel
 
 from src.utils.image_utils import get_agentic_image
@@ -82,5 +84,7 @@ class RegimeAnalyzer(AssistantAgent):
         thoughts = content.thoughts
         regime_report = content.response
 
-        self.close()
+        plt.close(fig)
+
+        await self.on_reset(cancellation_token=CancellationToken())
         return regime_report.dict()

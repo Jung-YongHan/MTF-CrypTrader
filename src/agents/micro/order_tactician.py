@@ -5,11 +5,12 @@ from typing import Any, Dict, Literal
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
+from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
-from src.agents.portfoilo_manager import PortfolioManager
+from src.portfoilo_manager import PortfolioManager
 
 
 class OrderResponse(BaseModel):
@@ -22,7 +23,10 @@ class OrderResponse(BaseModel):
         if not 0.0 <= v <= 1.0:
             raise ValueError("amount must be between 0 and 1")
         # 소수점 2자리까지 허용
-        if not isinstance(v, float) or len(str(v).split(".")[1]) > 2:
+        if not isinstance(v, float):
+            raise ValueError("amount must be a float with 2 decimal places")
+        parts = str(v).split(".")
+        if len(parts) == 2 and len(parts[1]) > 2:
             raise ValueError("amount must be a float with 2 decimal places")
         return v
 
@@ -160,9 +164,6 @@ class OrderTactician(AssistantAgent):
                 cash_ratio = ratios.get("cash", 0.0)
                 coin_ratio = sum(v for k, v in ratios.items() if k != "cash")
 
-                print(f"OrderTactician: {order} {amount}")
-                print(f"cash_ratio: {cash_ratio}, coin_ratio: {coin_ratio}")
-
                 exposure = macro_report.get("exposure", 0.0)
 
                 # 추가 검증: buy 오류
@@ -184,7 +185,6 @@ class OrderTactician(AssistantAgent):
                 # 추가 검증: sell 오류
                 if order == "sell":
                     if round(amount, 4) > round(coin_ratio, 4):
-                        print("통과1")
                         raise ValueError(
                             "Sell amount {:.4f} exceeds coin balance {:.4f}.".format(
                                 amount, coin_ratio
@@ -200,7 +200,7 @@ class OrderTactician(AssistantAgent):
                             "초과된 비율만큼 매도 주문을 생성해야 합니다."
                         )
 
-                self.close()
+                await self.on_reset(cancellation_token=CancellationToken())
                 return content.response.model_dump()
             except ValidationError as e:
                 feedback = TextMessage(
@@ -224,4 +224,3 @@ class OrderTactician(AssistantAgent):
                     source="validator",
                 )
             messages.append(feedback)
-            print(messages)

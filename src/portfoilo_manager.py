@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -167,19 +167,12 @@ class PortfolioManager:
 
     def compute_return(self) -> float:
         """전체 수익률 계산"""
-        final_value = self.portfolio_value_history[-1]
+        final_value = self.portfolio_value_history[-1]["value"]
         return (final_value - self.initial_value) / self.initial_value
 
     def compute_mdd(self) -> float:
         """최대 낙폭(MDD) 반환"""
         return self.max_drawdown
-
-    def compute_win_rate(self) -> float:
-        """승률 계산"""
-        if not self.trade_history:
-            return 0.0
-        wins = sum(1 for t in self.trade_history if t["win"])
-        return wins / len(self.trade_history)
 
     def compute_sharpe(self) -> float:
         """
@@ -213,6 +206,5 @@ class PortfolioManager:
         return {
             "return": self.compute_return(),
             "mdd": self.compute_mdd(),
-            "win_rate": self.compute_win_rate(),
             "sharpe": self.compute_sharpe(),
         }

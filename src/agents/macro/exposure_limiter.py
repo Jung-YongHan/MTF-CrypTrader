@@ -5,10 +5,11 @@ from typing import Any, Dict
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
+from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
-from src.agents.portfoilo_manager import PortfolioManager
+from src.portfoilo_manager import PortfolioManager
 
 
 class ExposureResponse(BaseModel):
@@ -120,7 +121,7 @@ class ExposureLimiter(AssistantAgent):
                 regime_report_including_exposure = regime_report.copy()
                 regime_report_including_exposure["exposure"] = exposure
 
-                self.close()
+                await self.on_reset(cancellation_token=CancellationToken())
                 return regime_report_including_exposure
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(

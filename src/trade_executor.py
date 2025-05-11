@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from src.agents.portfoilo_manager import PortfolioManager
+from src.portfoilo_manager import PortfolioManager
 
 
 class TradeExecutor:
@@ -28,6 +28,4 @@ class TradeExecutor:
 
         print(
             f"Trade executed: {order_type} {amount} of {coin} at price {price_data.get("open")}."
-            f"New portfolio: {PortfolioManager.get_instance().get_portfolio()}"
-            f"New portfolio ratio: {PortfolioManager.get_instance().get_portfolio_ratio()}"
         )

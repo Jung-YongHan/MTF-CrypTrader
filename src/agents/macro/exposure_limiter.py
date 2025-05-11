@@ -66,7 +66,7 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
 }
 
 ### 출력 JSON 형식
-{exposure_limit: ...} 
+{exposure: ...} 
 
 ### 노출 제한 구간
 - (STRICT) 0 ~ 1 사이 실수값, 소수점 2자리까지 허용
@@ -75,9 +75,9 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
 - 1: 자산의 전부를 코인으로 투자
 
 ### 예시
-- {exposure_limit: 0.5}
-- {exposure_limit: 0.2}
-- {exposure_limit: 0.8}
+- {exposure: 0.5}
+- {exposure: 0.2}
+- {exposure: 0.8}
 """
             ),
         )
@@ -105,10 +105,10 @@ regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfo
                 ExposureResponse.model_validate({"exposure": content.response.exposure})
 
                 thoughts = content.thoughts
-                exposure_limit = content.response.exposure
+                exposure = content.response.exposure
 
                 regime_report_including_exposure = regime_report.copy()
-                regime_report_including_exposure["exposure_limit"] = exposure_limit
+                regime_report_including_exposure["exposure"] = exposure
 
                 self.close()
                 return regime_report_including_exposure

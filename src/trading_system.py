@@ -77,6 +77,10 @@ class TradingSystem:
                 price_data=price_data, fig=fig
             )
 
+            if not macro_report["exposure"] > 0.0:
+                print("No exposure, skipping micro analysis.")
+                continue
+
             print(f"Macro Report: {macro_report}")
 
             # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨

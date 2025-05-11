@@ -14,31 +14,57 @@ class DataPreprocessor:
       2) 각 시장에 맞는 주요 지표 재계산
     """
 
-    def __init__(self):
-        # 일봉(매크로) 데이터프레임
-        self.df_macro = pd.DataFrame(
-            columns=["datetime", "open", "high", "low", "close", "volume"]
+    def __init__(
+        self, df_macro: pd.DataFrame | None = None, df_micro: pd.DataFrame | None = None
+    ):
+        # 기본 컬럼 정의
+        base_cols = ["datetime", "open", "high", "low", "close", "volume"]
+
+        # 주입된 초기 데이터프레임이 없으면 빈 DF 생성
+        self.df_macro = (
+            df_macro.copy() if df_macro is not None else pd.DataFrame(columns=base_cols)
         )
-        # 분봉(마이크로) 데이터프레임
-        self.df_micro = pd.DataFrame(
-            columns=["datetime", "open", "high", "low", "close", "volume"]
+        self.df_micro = (
+            df_micro.copy() if df_micro is not None else pd.DataFrame(columns=base_cols)
         )
+
+        # 공통 전처리: dtype·정렬·중복 제거
+        for df in (self.df_macro, self.df_micro):
+            if not df.empty:
+                df["datetime"] = pd.to_datetime(df["datetime"])
+                df.drop_duplicates(subset="datetime", keep="last", inplace=True)
+                df.sort_values("datetime", inplace=True)
+                df.reset_index(drop=True, inplace=True)
+
+        # 초기 지표 계산
+        if not self.df_macro.empty:
+            self._compute_macro_indicators()
+        if not self.df_micro.empty:
+            self._compute_micro_indicators()
 
     def update_and_get_price_data(
-        self, row: dict, timeframe: str, save_path: str
+        self, row: dict, timeframe: str, save_path: str = None
     ) -> Tuple[Dict, Any]:
-        full_df = self._update(row, timeframe)
+        # datetime 파싱
+        row["datetime"] = pd.to_datetime(row["datetime"])
 
-        if timeframe == "macro":
-            window_df = full_df.tail(60)
-        else:
-            window_df = full_df.tail(20)
+        full_df = self._update(row, timeframe)
+        full_df["datetime"] = pd.to_datetime(full_df["datetime"])
+
+        # 기간(window) 설정
+        window = 60 if timeframe == "macro" else 20
+
+        # row 시점까지의 과거 데이터 확보
+        hist_df = full_df[full_df["datetime"] <= row["datetime"]]
+        window_df = hist_df.tail(window)  # 부족하면 가용 범위 전체
 
         fig = self._draw_close_chart(
             df=window_df, timeframe=timeframe, save_path=save_path, return_fig=True
         )
-        tmp_df = full_df.iloc[[-1]].dropna(axis=1).to_dict(orient="records")[0]
-        return tmp_df, fig
+        # row 시점(가장 최근 행)만 dict 로 변환해 반환
+        latest_row = hist_df.iloc[[-1]].dropna(axis=1).to_dict(orient="records")[0]
+        latest_row["datetime"] = latest_row["datetime"].strftime("%Y-%m-%d %H:%M:%S")
+        return latest_row, fig  # tmp_df를 latest_row로 변경하여 반환
 
     def _update(self, row: dict, timeframe: str) -> pd.DataFrame:
         """
@@ -47,11 +73,21 @@ class DataPreprocessor:
         """
         row_df = pd.DataFrame([row])
         if timeframe == "macro":
-            self.df_macro = pd.concat([self.df_macro, row_df], ignore_index=True)
+            self.df_macro = (
+                pd.concat([self.df_macro, row_df], ignore_index=True)
+                .drop_duplicates(subset="datetime", keep="last")
+                .sort_values("datetime")
+                .reset_index(drop=True)
+            )
             self._compute_macro_indicators()
             return self.df_macro
         elif timeframe == "micro":
-            self.df_micro = pd.concat([self.df_micro, row_df], ignore_index=True)
+            self.df_micro = (
+                pd.concat([self.df_micro, row_df], ignore_index=True)
+                .drop_duplicates(subset="datetime", keep="last")
+                .sort_values("datetime")
+                .reset_index(drop=True)
+            )
             self._compute_micro_indicators()
             return self.df_micro
         else:
@@ -59,11 +95,9 @@ class DataPreprocessor:
 
     def _compute_macro_indicators(self):
         df = self.df_macro
-        close = df["close"].astype(float)
-        high = df["high"].astype(float)
-        low = df["low"].astype(float)
-        volume = df["volume"].astype(float)
-        open_ = df["open"].astype(float)
+        close, high, low, volume, open_ = (
+            df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
+        )
 
         # 일봉용 주요 지표 계산 (기존과 동일)
         df["sma5"] = talib.SMA(close, timeperiod=5)
@@ -93,11 +127,9 @@ class DataPreprocessor:
 
     def _compute_micro_indicators(self):
         df = self.df_micro
-        close = df["close"].astype(float)
-        high = df["high"].astype(float)
-        low = df["low"].astype(float)
-        volume = df["volume"].astype(float)
-        open_ = df["open"].astype(float)
+        close, high, low, volume, open_ = (
+            df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
+        )
 
         # 분봉용 지표: 일부 중복, 일부 간소화/특화 가능
         df["sma5"] = talib.SMA(close, timeperiod=5)
@@ -156,7 +188,7 @@ class DataPreprocessor:
         fig.autofmt_xdate(rotation=45)
         ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=10, prune="both"))
 
-        if save_path:
+        if save_path is not None:
             directory = os.path.dirname(save_path)
             if directory and not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)

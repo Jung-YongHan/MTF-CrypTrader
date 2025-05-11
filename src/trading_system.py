@@ -16,11 +16,15 @@ class TradingSystem:
     def __init__(
         self,
         regime: str,
+        start_date: str,
+        end_date: str,
         coin: str,
         micro_tick: int = 1,
         initial_balance: float = 10_000_000,
     ):
         self.regime = regime
+        self.start_date = start_date
+        self.end_date = end_date
         self.coin = coin
         self.initial_balance = initial_balance
 
@@ -31,14 +35,16 @@ class TradingSystem:
             regime: bull, bear, total
             """
             if file_prefix == "day":
-                return pd.read_csv(f"data/{coin}_{file_prefix}_{regime}.csv")
+                # end_date 까지만 분석
+                if self.end_date:
+                    return pd.read_csv(f"data/{coin}_{file_prefix}.csv")
             elif file_prefix == "minute":
                 # micro_tick: 1, 3, 5, 15, 30
                 if micro_tick not in [1, 3, 5, 15, 30]:
                     raise ValueError("micro_tick은 1, 3, 5, 15, 30 중 하나여야 합니다.")
-                return pd.read_csv(
-                    f"data/{coin}_{file_prefix}{micro_tick}_{regime}.csv"
-                )
+                # end_date 까지만 분석
+                if self.end_date:
+                    return pd.read_csv(f"data/{coin}_{file_prefix}{micro_tick}.csv")
             else:
                 raise ValueError("file_prefix는 'day' 또는 'minute'만 가능합니다.")
 
@@ -50,7 +56,7 @@ class TradingSystem:
             cash=initial_balance,
         )
 
-        self.data_preprocessor = DataPreprocessor()
+        self.data_preprocessor = DataPreprocessor(self.df_macro, self.df_micro)
         self.macro_analysis_team = MacroAnalysisTeam()
         self.micro_analysis_team = MicroAnalysisTeam()
         self.trade_executor = TradeExecutor()
@@ -65,10 +71,20 @@ class TradingSystem:
             coin=coin, regime=regime, report_type="trade"
         )
 
+        self.df_macro = self.df_macro[
+            (self.df_macro["datetime"] >= self.start_date)
+            & (self.df_macro["datetime"] < self.end_date)
+        ]
+        self.df_micro = self.df_micro[
+            (self.df_micro["datetime"] >= self.start_date)
+            & (self.df_micro["datetime"] < self.end_date)
+        ]
+
     async def run(self) -> None:
         # 1. 매크로 단위 데이터를 순회
         start_time = time()
         for index, macro_tick in self.df_macro.iterrows():
+            # start_date 이전에 대해서는 가격적 분석 지표만 추가
             macro_dict = macro_tick.to_dict()
 
             macro_start_time = time()
@@ -182,11 +198,15 @@ class AsyncTradingSystem(TradingSystem):
     def __init__(
         self,
         regime: str,
+        start_date: str,
+        end_date: str,
         coin: str,
         micro_tick: int = 1,
     ):
         super().__init__(
             regime=regime,
+            start_date=start_date,
+            end_date=end_date,
             coin=coin,
             micro_tick=micro_tick,
         )
@@ -195,7 +215,9 @@ class AsyncTradingSystem(TradingSystem):
         asyncio.run(super().run())
 
 
-def create_system(regime: str, coin: str, micro_tick: int = 1):
+def create_system(
+    regime: str, start_date: str, end_date: str, coin: str, micro_tick: int = 1
+):
     import warnings
 
     warnings.filterwarnings("ignore")
@@ -204,6 +226,8 @@ def create_system(regime: str, coin: str, micro_tick: int = 1):
 
     return AsyncTradingSystem(
         regime=regime,
+        start_date=start_date,
+        end_date=end_date,
         coin=coin,
         micro_tick=micro_tick,
     )

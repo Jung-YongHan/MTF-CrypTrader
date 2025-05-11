@@ -1,11 +1,14 @@
 import json
 from os import getenv
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.messages import TextMessage
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from src.agents.portfoilo_manager import PortfolioManager
 
 
 class ExposureResponse(BaseModel):
@@ -37,30 +40,29 @@ class ExposureLimiter(AssistantAgent):
             output_content_type=RegimeAnalyzerResponse,
             system_message=(
                 """당신은 노출 한도 관리자입니다.
-regime 및 가격 데이터(OHLCV 및 기술적 분석 지표)를 바탕으로 포트폴리오의 투자 한도를 제한해야 합니다.
-이때, 현재 포트폴리오의 현황도 함께 고려해야 합니다.
+regime_report 및 price_data(OHLCV 및 기술적 분석 지표)와 현재 portfolio ratio 현황을 기반으로 자산 투자 한도를 제한해야 합니다.
+이때 제한하는 자산은 현금을 제외한 코인 자산에 대해서 제한합니다.
+예시로, 자산 투자 한도가 0.5인 경우, 자산의 절반을 코인에 투자할 수 있습니다.
 
 ### 입력 JSON 형식
 {
-    regime: bull | bear | sideways | high_volatility,
-    confidence: 0‑1,   // regime classifier confidence
-    portfolio: {
+    regime_report: {
+        regime: bull | bear | sideways | high_volatility,
+        confidence: 0‑1,   // regime classifier confidence
+    },
+    price_data: {
+        "timestamp": 2025-01-01 09:00:00,
+        "open": 10000,
+        "high": 11000,
+        "low": 9000,
+        "close": 10500,
+        "volume": 1000,
+        ...
+    },
+    portfolio_ratio: {
         "cash": 0.6,
         "btc": 0.4
     },
-    price_data: [
-        {
-            "timestamp": 2025-01-01 09:00:00,
-            "open": 10000,
-            "high": 11000,
-            "low": 9000,
-            "close": 10500,
-            "volume": 1000,
-            ...
-        },
-        ...
-    ],
-
 }
 
 ### 출력 JSON 형식
@@ -69,8 +71,8 @@ regime 및 가격 데이터(OHLCV 및 기술적 분석 지표)를 바탕으로 �
 ### 노출 제한 구간
 - (STRICT) 0 ~ 1 사이 실수값, 소수점 2자리까지 허용
 - 0: 자산의 전부를 현금으로 보유
-- 0.5: 자산의 절반을 현금으로 보유
-- 1: 자산의 전부를 투자
+- 0.5: 자산의 절반을 코인으로 보유
+- 1: 자산의 전부를 코인으로 투자
 
 ### 예시
 - {exposure_limit: 0.5}
@@ -82,35 +84,43 @@ regime 및 가격 데이터(OHLCV 및 기술적 분석 지표)를 바탕으로 �
 
     async def limit_exposure(
         self,
-        portfolio: Dict[str, Any],
         regime_report: Dict[str, Any],
-        price_data: List[Dict[str, Any]],
+        price_data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        report = {**portfolio, **regime_report, "price_data": price_data}
-        report = {**portfolio, **regime_report, "price_data": price_data}
-        while True:
-            content = None
+        report = {
+            "regime_report": regime_report,
+            "price_data": price_data,
+            "portfolio_ratio": PortfolioManager.get_instance().get_portfolio_ratio(),
+        }
+        base_msg = TextMessage(
+            content=json.dumps(report, indent=4),
+            source="data_preprocessor",
+        )
+        message = [base_msg]
+
+        for _ in range(5):  # 최대 5회 반복
             try:
-                response = await self.run(task=json.dumps(report))
+                response = await self.run(task=message)
                 content = response.messages[-1].content
-                # pydantic parsing; 범위 벗어나면 error
                 ExposureResponse.model_validate({"exposure": content.response.exposure})
-                break
-            except ValueError:
-                # 범위 벗어남 → 다시 요청
-                if content is not None and hasattr(content, "response"):
-                    print(
-                        f"Exposure limit out of range: {content.response.exposure}. Retrying..."
-                    )
-                else:
-                    print(
-                        "Exposure limit out of range and content is None. Retrying..."
-                    )
-                continue
 
-        thoughts = content.thoughts
-        exposure_limit = content.response.exposure
+                thoughts = content.thoughts
+                exposure_limit = content.response.exposure
 
-        regime_report_including_exposure = regime_report.copy()
-        regime_report_including_exposure["exposure_limit"] = exposure_limit
-        return regime_report_including_exposure
+                regime_report_including_exposure = regime_report.copy()
+                regime_report_including_exposure["exposure_limit"] = exposure_limit
+
+                self.close()
+                return regime_report_including_exposure
+            except ValidationError as e:  # ← ValidationError 잡기
+                feedback = TextMessage(
+                    content=(
+                        "JSON schema validation failed:"
+                        f"{e}\n\n"
+                        "규칙:\n"
+                        "- exposure는 0.00~1.00 사이 소수점 두 자리.\n"
+                    ),
+                    source="validator",
+                )
+                message.append(feedback)
+        raise RuntimeError("ExposureLimiter: too many invalid responses")

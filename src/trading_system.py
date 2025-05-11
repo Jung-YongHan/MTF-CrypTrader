@@ -1,19 +1,28 @@
 import asyncio
+from time import time
 
 import pandas as pd
 from dotenv import load_dotenv
 
-from src.agents.executor import TradeExecutor
 from src.agents.macro.macro_analysis_team import MacroAnalysisTeam
 from src.agents.micro.micro_analysis_team import MicroAnalysisTeam
+from src.agents.portfoilo_manager import PortfolioManager
 from src.agents.reflector import FeedbackReflector
+from src.agents.trade_executor import TradeExecutor
 from src.data_preprocessor import DataPreprocessor
 
 
 class TradingSystem:
-    def __init__(self, regime: str, coin: str, micro_tick: int = 1):
+    def __init__(
+        self,
+        regime: str,
+        coin: str,
+        micro_tick: int = 1,
+        initial_balance: float = 10_000_000,
+    ):
         self.regime = regime
         self.coin = coin
+        self.initial_balance = initial_balance
 
         def load_data(file_prefix):
             """
@@ -24,8 +33,8 @@ class TradingSystem:
             if file_prefix == "day":
                 return pd.read_csv(f"data/{coin}_{file_prefix}_{regime}.csv")
             elif file_prefix == "minute":
-                # micro_tick: 1, 5, 15, 30, 60
-                if micro_tick not in [1, 5, 15, 30, 60]:
+                # micro_tick: 1, 3, 5, 15, 30
+                if micro_tick not in [1, 3, 5, 15, 30]:
                     raise ValueError("micro_tick은 1, 3, 5, 15, 30 중 하나여야 합니다.")
                 return pd.read_csv(
                     f"data/{coin}_{file_prefix}{micro_tick}_{regime}.csv"
@@ -36,10 +45,10 @@ class TradingSystem:
         self.df_macro = load_data("day")
         self.df_micro = load_data("minute")
 
-        self.portfolio = {
-            "cash": 10000000,
-            self.coin: 0,
-        }
+        self.portfolio_manager = PortfolioManager(
+            coin=coin,
+            cash=initial_balance,
+        )
 
         self.data_preprocessor = DataPreprocessor()
         self.macro_analysis_team = MacroAnalysisTeam()
@@ -48,45 +57,104 @@ class TradingSystem:
         self.feedback_reflector = FeedbackReflector()
 
     async def run(self) -> None:
-        # 1. 일 단위 데이터를 순회하며 매크로 파라미터를 업데이트
-        for index, day in self.df_macro.iterrows():
-            days_dict = day.to_dict()
+        # 1. 매크로 단위 데이터를 순회
+        start_time = time()
+        for index, macro_tick in self.df_macro.iterrows():
+            macro_dict = macro_tick.to_dict()
 
-            # 2. 현재까지의 일 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
-            records, fig = self.data_preprocessor.update_and_get_data(
-                row=days_dict,
+            macro_start_time = time()
+
+            print(f"###### {macro_tick['datetime']}일 ######")
+
+            # 2. 현재까지의 매크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
+            price_data, fig = self.data_preprocessor.update_and_get_price_data(
+                row=macro_dict,
                 timeframe="macro",
-                save_path=f"data/close_charts/{index+1}_day_chart",
+                save_path=f"data/close_charts/{self.regime}/{index+1}_macro_chart",
             )
             # 3. 매크로 시장 분석
-            regime_report = await self.macro_analysis_team.analyze(
-                self.portfolio, records, fig
+            macro_report = await self.macro_analysis_team.analyze(
+                price_data=price_data, fig=fig
             )
-            print(f"Regime Report: {regime_report}")
-        #     beta = await self.beta_strategist.select(regime)
-        #     limit = await self.exposure_limiter.limit(regime)
-        #     macro_report = {"regime": regime, "beta": beta, "limit": limit}
 
-        #     # 해당 일의 분봉 데이터만 필터
-        #     minute_slice = self.df_micro[
-        #         self.df_micro["timestamp"].dt.date == day["timestamp"].date()
-        #     ]
-        #     for _, minute in minute_slice.iterrows():
-        #         minute_dict = minute.to_dict()
-        #         pulse = await self.pulse_detector.detect(minute_dict, macro_report)
-        #         order = await self.order_tactician.decide(pulse, self.portfolio)
-        #         result = await self.trade_executor.execute(order)
-        #         feedback = await self.feedback_reflector.reflect(
-        #             {"order": order, "result": result}
-        #         )
+            print(f"Macro Report: {macro_report}")
 
-        #         # 피드백의 patch를 읽어 다음 매크로 파라미터에 적용...
-        #         # 예: regime_analyzer.update_system_message(...)
-        #         #    beta_strategist.update_system_message(...)
-        #         #    exposure_limiter.update_system_message(...)
-        #         # 필요에 따라 구현
+            # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨
+            df_micro = self.get_micro_data_for_day(macro_tick=macro_tick)
 
-        # print("Backtest completed.")
+            # 5. 마이크로 시장 분석 및 투자 진행
+            # 이전 마이크로 분석 리포트 초기화(시가에 구매를 위해)
+            micro_report = None
+            for index, micro_tick in df_micro.iterrows():
+                micro_dict = micro_tick.to_dict()
+                print(f"## {micro_tick['datetime']} 캔들 ##")
+
+                self.portfolio_manager.update_portfolio_ratio(price=micro_dict["open"])
+
+                # 5.1 시가에 대해서 매도/매수/보유 결정
+                await self.trade_executor.execute(
+                    price_data=micro_dict,
+                    coin=self.coin,
+                    micro_report=micro_report,
+                )
+
+                # 6. 현재까지의 마이크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
+                price_data, fig = self.data_preprocessor.update_and_get_price_data(
+                    row=micro_dict,
+                    timeframe="micro",
+                    save_path=f"data/close_charts/{self.regime}/{index+1}_micro_chart",
+                )
+
+                # 7. 마이크로 시장 분석 및 주문 결정
+                micro_report = await self.micro_analysis_team.analyze(
+                    price_data=price_data,
+                    fig=fig,
+                    macro_report=macro_report,
+                )
+
+                print(f"Micro Report: {micro_report}")
+
+            macro_end_time = time()
+            print(
+                f"Macro analysis time: {macro_end_time - macro_start_time:.2f} seconds"
+            )
+        end_time = time()
+        print(f"Total time taken for backtest: {end_time - start_time:.2f} seconds")
+
+        self.portfolio_manager.sell_all(
+            price=self.df_macro.iloc[-1]["close"],
+        )
+
+        print("Backtest completed.")
+        print(
+            f"Final portfolio: {self.portfolio_manager.get_portfolio()}, "
+            f"Final portfolio ratio: {self.portfolio_manager.get_portfolio_ratio()}"
+        )
+        # 최초 투자 금액 대비 수익률 계산
+        profit = (
+            (self.portfolio_manager.get_portfolio()["cash"] - self.initial_balance)
+            / self.initial_balance
+            * 100
+        )
+        print(f"최종 수익률: {profit:.3f}%")
+
+    def get_micro_data_for_day(self, macro_tick) -> pd.DataFrame:
+        """
+        Returns the micro timeframe data (e.g., minute candles) that fall within the day specified by the given macro_tick.
+
+        Args:
+            macro_tick: A row from the macro DataFrame representing a single day.
+
+        Returns:
+            pd.DataFrame: Micro timeframe data for the specified day.
+        """
+        day_start = pd.to_datetime(macro_tick["datetime"])
+        day_end = day_start + pd.Timedelta(days=1)
+        micro_slice = self.df_micro[
+            (pd.to_datetime(self.df_micro["datetime"]) >= day_start)
+            & (pd.to_datetime(self.df_micro["datetime"]) < day_end)
+        ]
+        return micro_slice
 
 
 class AsyncTradingSystem(TradingSystem):

@@ -24,7 +24,7 @@ class DataPreprocessor:
             columns=["datetime", "open", "high", "low", "close", "volume"]
         )
 
-    def update_and_get_data(
+    def update_and_get_price_data(
         self, row: dict, timeframe: str, save_path: str
     ) -> Tuple[Dict, Any]:
         full_df = self._update(row, timeframe)

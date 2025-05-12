@@ -193,7 +193,8 @@ class PortfolioManager:
         # 구간별 수익률 계산
         returns = values[1:] / values[:-1] - 1
         # 초과 수익률
-        excess = returns - self.risk_free_rate * (self.interval_minutes / 525600)
+        # 무위험 수익률을 1분 단위로 환산하여 적용
+        excess = returns - self.risk_free_rate * (self.interval_minutes / 1440)
         # 표준편차 0 방지
         if excess.std() == 0:
             return 0.0

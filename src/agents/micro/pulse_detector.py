@@ -34,11 +34,10 @@ class PulseDetectorResponse(BaseModel):
 
 class PulseDetector(AssistantAgent):
     def __init__(self):
+        self._client = OllamaChatCompletionClient(model="gemma3:4b")
         super().__init__(
             "pulse_detector",
-            model_client=OllamaChatCompletionClient(
-                model=getenv("PULSE_DETECTOR_MODEL")
-            ),
+            model_client=self._client,
             output_content_type=PulseDetectorResponse,
             system_message=(
                 """당신은 펄스 감지자입니다.
@@ -74,6 +73,8 @@ class PulseDetector(AssistantAgent):
 
     async def detect(self, price_data: Dict[str, Any], fig: Any) -> Dict[str, Any]:
         image = get_agentic_image(fig)
+        plt.close(fig)
+
         base_mm = MultiModalMessage(
             content=[image, f"{price_data}"],
             source="data_preprocessor",
@@ -89,8 +90,7 @@ class PulseDetector(AssistantAgent):
                 thoughts = content.thoughts
                 pulse_report = content.response
 
-                await self.on_reset(cancellation_token=CancellationToken())
-                plt.close(fig)
+                await self.close()
                 return pulse_report.dict()
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
@@ -104,3 +104,8 @@ class PulseDetector(AssistantAgent):
                     source="validator",
                 )
                 messages.append(feedback)
+
+    async def close(self):
+        await self.on_reset(cancellation_token=CancellationToken())
+        await self._client.close()
+        await super().close()

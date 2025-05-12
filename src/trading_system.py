@@ -3,6 +3,7 @@ from time import time
 
 import pandas as pd
 from dotenv import load_dotenv
+from pandas.tseries.offsets import MonthEnd
 
 from src.agents.macro.macro_analysis_team import MacroAnalysisTeam
 from src.agents.micro.micro_analysis_team import MicroAnalysisTeam
@@ -19,7 +20,8 @@ class TradingSystem:
         start_date: str,
         end_date: str,
         coin: str,
-        micro_tick: int = 1,
+        macro_tick: str,
+        micro_tick: str,
         initial_balance: float = 10_000_000,
     ):
         self.regime = regime
@@ -27,33 +29,31 @@ class TradingSystem:
         self.end_date = end_date
         self.coin = coin
         self.initial_balance = initial_balance
+        self.macro_tick = macro_tick
+        self.micro_tick = micro_tick
 
-        def load_data(file_prefix):
+        def load_data(tick):
             """
             coin: BTC, ETH, SOL
-            file_prefix: day, minute
-            regime: bull, bear, total
+            tick: __desc__
             """
-            if file_prefix == "day":
-                # end_date 까지만 분석
-                if self.end_date:
-                    return pd.read_csv(f"data/{coin}_{file_prefix}.csv")
-            elif file_prefix == "minute":
-                # micro_tick: 1, 3, 5, 15, 30
-                if micro_tick not in [1, 3, 5, 15, 30]:
-                    raise ValueError("micro_tick은 1, 3, 5, 15, 30 중 하나여야 합니다.")
-                # end_date 까지만 분석
-                if self.end_date:
-                    return pd.read_csv(f"data/{coin}_{file_prefix}{micro_tick}.csv")
-            else:
-                raise ValueError("file_prefix는 'day' 또는 'minute'만 가능합니다.")
+            if self.end_date:
+                return pd.read_csv(f"data/{coin}_{tick}.csv")
 
-        self.df_macro = load_data("day")
-        self.df_micro = load_data("minute")
+        df_macro_full = load_data(macro_tick)
+        df_micro_full = load_data(micro_tick)
+
+        self.df_macro = df_macro_full[
+            (pd.to_datetime(df_macro_full["datetime"]) >= self.start_date)
+            & (pd.to_datetime(df_macro_full["datetime"]) < self.end_date)
+        ]
+        self.df_micro = df_micro_full[
+            (pd.to_datetime(df_micro_full["datetime"]) >= self.start_date)
+            & (pd.to_datetime(df_micro_full["datetime"]) < self.end_date)
+        ]
 
         self.portfolio_manager = PortfolioManager(
-            coin=coin,
-            cash=initial_balance,
+            coin=coin, cash=initial_balance, interval_minutes=1440
         )
 
         self.data_preprocessor = DataPreprocessor(self.df_macro, self.df_micro)
@@ -71,15 +71,6 @@ class TradingSystem:
             coin=coin, regime=regime, report_type="trade"
         )
 
-        self.df_macro = self.df_macro[
-            (self.df_macro["datetime"] >= self.start_date)
-            & (self.df_macro["datetime"] < self.end_date)
-        ]
-        self.df_micro = self.df_micro[
-            (self.df_micro["datetime"] >= self.start_date)
-            & (self.df_micro["datetime"] < self.end_date)
-        ]
-
     async def run(self) -> None:
         # 1. 매크로 단위 데이터를 순회
         start_time = time()
@@ -89,7 +80,7 @@ class TradingSystem:
 
             macro_start_time = time()
 
-            print(f"###### {macro_tick['datetime']}일 ######")
+            print(f"###### {macro_tick['datetime']} 틱 시작 ######")
 
             # 2. 현재까지의 매크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
             price_data, fig = self.data_preprocessor.update_and_get_price_data(
@@ -113,7 +104,6 @@ class TradingSystem:
 
             # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨
             df_micro = self.get_micro_data_for_day(macro_tick=macro_tick)
-
             # 5. 마이크로 시장 분석 및 투자 진행
             # 이전 마이크로 분석 리포트 초기화(시가에 구매를 위해)
             micro_report = None
@@ -135,7 +125,7 @@ class TradingSystem:
                 }
                 self.trade_recode_manager.record_step(trade_report)
 
-                print(f"## {micro_tick['datetime']} 캔들 ##")
+                print(f"## {micro_tick['datetime']} 틱 ##")
 
                 # 6. 현재까지의 마이크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
                 price_data, fig = self.data_preprocessor.update_and_get_price_data(
@@ -177,16 +167,29 @@ class TradingSystem:
 
     def get_micro_data_for_day(self, macro_tick) -> pd.DataFrame:
         """
-        Returns the micro timeframe data (e.g., minute candles) that fall within the day specified by the given macro_tick.
+        Returns the micro timeframe data (e.g., minute candles) that fall within
+        the period specified by the given macro_tick.
 
         Args:
-            macro_tick: A row from the macro DataFrame representing a single day.
+            macro_tick: A row from the macro DataFrame representing a single
+                day or period.
 
         Returns:
-            pd.DataFrame: Micro timeframe data for the specified day.
+            pd.DataFrame: Micro timeframe data for the specified period.
         """
+        days = {
+            "week1": 7,
+            "day1": 1,
+        }
+
         day_start = pd.to_datetime(macro_tick["datetime"])
-        day_end = day_start + pd.Timedelta(days=1)
+
+        if self.macro_tick == "month1":
+            # Move to the first day of next month, then use it as exclusive upper bound
+            day_end = (day_start + MonthEnd(1)) + pd.Timedelta(days=1)
+        else:
+            day_end = day_start + pd.Timedelta(days=days[self.macro_tick])
+
         micro_slice = self.df_micro[
             (pd.to_datetime(self.df_micro["datetime"]) >= day_start)
             & (pd.to_datetime(self.df_micro["datetime"]) < day_end)
@@ -201,13 +204,15 @@ class AsyncTradingSystem(TradingSystem):
         start_date: str,
         end_date: str,
         coin: str,
-        micro_tick: int = 1,
+        macro_tick: str,
+        micro_tick: str,
     ):
         super().__init__(
             regime=regime,
             start_date=start_date,
             end_date=end_date,
             coin=coin,
+            macro_tick=macro_tick,
             micro_tick=micro_tick,
         )
 
@@ -216,7 +221,12 @@ class AsyncTradingSystem(TradingSystem):
 
 
 def create_system(
-    regime: str, start_date: str, end_date: str, coin: str, micro_tick: int = 1
+    regime: str,
+    start_date: str,
+    end_date: str,
+    coin: str,
+    macro_tick: str,
+    micro_tick: str,
 ):
     import warnings
 
@@ -229,6 +239,7 @@ def create_system(
         start_date=start_date,
         end_date=end_date,
         coin=coin,
+        macro_tick=macro_tick,
         micro_tick=micro_tick,
     )
 

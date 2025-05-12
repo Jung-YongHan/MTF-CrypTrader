@@ -7,7 +7,6 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
 from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
-from autogen_ext.models.openai import OpenAIChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
 from src.portfoilo_manager import PortfolioManager
@@ -45,15 +44,10 @@ class OrderTacticianResponse(BaseModel):
 
 class OrderTactician(AssistantAgent):
     def __init__(self):
+        self._client = OllamaChatCompletionClient(model="gemma3:4b")
         super().__init__(
             "order_tactician",
-            model_client=OllamaChatCompletionClient(
-                model=getenv("ORDER_TACTICIAN_MODEL")
-            ),
-            # model_client=OpenAIChatCompletionClient(
-            #     model=getenv("ORDER_TACTICIAN_MODEL"),
-            #     api_key=getenv("OPENAI_API_KEY"),
-            # ),
+            model_client=self._client,
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 주문 전술가입니다.
@@ -103,6 +97,7 @@ class OrderTactician(AssistantAgent):
 ### 주문 결정 규칙
 - 보유 비율이 0인 경우: 해당 코인에 대한 매도("sell") 주문은 불가능합니다.
 - 최대 주문 한도: rate_limit 값은 해당 코인에 투자 가능한 최대 비율을 의미합니다. 기존 보유 비율을 고려하여, 추가 매수 또는 매도 가능한 최대 수량을 계산해야 합니다.
+- 이때, 시장 상황과 펄스 신호를 신중하게 고려하여 매수("buy") 또는 매도("sell") 주문을 결정합니다.
 - 강제 매도 조건: 현재 보유 비율이 rate_limit 값을 초과하는 경우, 초과분에 대해 매도 주문을 실행해야 합니다.
 - 보유 유지 조건: 현재 보유 비율이 rate_limit 값과 동일한 경우, 추가 매수 없이 보유를 유지해야 합니다.
 - 주문 수량 계산: 주문 수량은 rate_limit과과 현재 보유 비율의 차이로 계산됩니다.
@@ -200,7 +195,7 @@ class OrderTactician(AssistantAgent):
                             "초과된 비율만큼 매도 주문을 생성해야 합니다."
                         )
 
-                await self.on_reset(cancellation_token=CancellationToken())
+                await self.close()
                 return content.response.model_dump()
             except ValidationError as e:
                 feedback = TextMessage(
@@ -223,10 +218,14 @@ class OrderTactician(AssistantAgent):
                     source="validator",
                 )
             messages.append(feedback)
-
         print("OrderTactician: 5회 반복 후에도 오류 발생, 보유 유지")
-        await self.on_reset(cancellation_token=CancellationToken())
+        await self.close()
         return {
             "order": "hold",
             "amount": 0.0,
         }
+
+    async def close(self):
+        await self.on_reset(cancellation_token=CancellationToken())
+        await self._client.close()
+        await super().close()

@@ -1,6 +1,5 @@
 from typing import Any, Dict
 
-from src.agents.macro.beta_strategist import BetaStrategist
 from src.agents.macro.investment_rate_adjuster import InvestmentRateAdjuster
 from src.agents.macro.regime_analyzer import RegimeAnalyzer
 
@@ -8,7 +7,6 @@ from src.agents.macro.regime_analyzer import RegimeAnalyzer
 class MacroAnalysisTeam:
     def __init__(self):
         self.regime_analyzer = RegimeAnalyzer()
-        self.beta_strategist = BetaStrategist()
         self.investment_rate_adjuster = InvestmentRateAdjuster()
 
     async def analyze(self, price_data: Dict[str, Any], fig: Any) -> str:

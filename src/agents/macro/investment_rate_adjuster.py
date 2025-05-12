@@ -33,11 +33,10 @@ class InvestmentRateAdjusterResponse(BaseModel):
 
 class InvestmentRateAdjuster(AssistantAgent):
     def __init__(self):
+        self._client = OllamaChatCompletionClient(model="gemma3:4b")
         super().__init__(
             "investment_rate_adjuster",
-            model_client=OllamaChatCompletionClient(
-                model=getenv("INVESTMENT_RATE_ADJUSTER_MODEL")
-            ),
+            model_client=self._client,
             output_content_type=InvestmentRateAdjusterResponse,
             system_message=(
                 """당신은 투자 비율 조정가입니다.
@@ -122,7 +121,7 @@ class InvestmentRateAdjuster(AssistantAgent):
                 regime_report_including_rate_limit = regime_report.copy()
                 regime_report_including_rate_limit["rate_limit"] = rate_limit
 
-                await self.on_reset(cancellation_token=CancellationToken())
+                await self.close()
                 return regime_report_including_rate_limit
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
@@ -135,3 +134,8 @@ class InvestmentRateAdjuster(AssistantAgent):
                     source="validator",
                 )
                 message.append(feedback)
+
+    async def close(self):
+        await self.on_reset(cancellation_token=CancellationToken())
+        await self._client.close()
+        await super().close()

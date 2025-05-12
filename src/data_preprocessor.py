@@ -69,7 +69,7 @@ class DataPreprocessor:
     def _update(self, row: dict, timeframe: str) -> pd.DataFrame:
         """
         row: dict, 새로운 데이터 한 건
-        timeframe: "macro" (일봉) 또는 "micro" (분봉)
+        timeframe: "macro" 또는 "micro"
         """
         row_df = pd.DataFrame([row])
         if timeframe == "macro":
@@ -99,57 +99,54 @@ class DataPreprocessor:
             df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
         )
 
-        # 일봉용 주요 지표 계산 (기존과 동일)
-        df["sma5"] = talib.SMA(close, timeperiod=5)
-        df["sma20"] = talib.SMA(close, timeperiod=20)
-        df["sma60"] = talib.SMA(close, timeperiod=60)
-        df["ema12"] = talib.EMA(close, timeperiod=12)
-        df["ema26"] = talib.EMA(close, timeperiod=26)
+        # 거시적(매크로) 관점의 주요 지표 계산
+        # 경기순환, 추세, 변동성, 위험 등 장기적 흐름 파악에 초점
+        df["sma200"] = talib.SMA(close, timeperiod=200)  # 장기 이동평균
+        df["ema100"] = talib.EMA(close, timeperiod=100)  # 장기 EMA
         df["bb_upper"], df["bb_mid"], df["bb_lower"] = talib.BBANDS(
-            close, timeperiod=20, nbdevup=2, nbdevdn=2
-        )
-        df["rsi14"] = talib.RSI(close, timeperiod=14)
-        df["stoch_k"], df["stoch_d"] = talib.STOCH(high, low, close)
+            close, timeperiod=60, nbdevup=2, nbdevdn=2
+        )  # 장기 볼린저밴드
+        df["rsi50"] = talib.RSI(close, timeperiod=50)  # 장기 RSI
         df["macd"], df["macd_signal"], df["macd_hist"] = talib.MACD(
-            close, fastperiod=12, slowperiod=26, signalperiod=9
-        )
-        df["cci"] = talib.CCI(high, low, close, timeperiod=20)
-        df["adx"] = talib.ADX(high, low, close, timeperiod=14)
+            close, fastperiod=24, slowperiod=52, signalperiod=18
+        )  # 장기 MACD
+        df["adx50"] = talib.ADX(high, low, close, timeperiod=50)  # 장기 ADX
+        df["atr60"] = talib.ATR(high, low, close, timeperiod=60)  # 장기 ATR
+        df["stddev60"] = talib.STDDEV(close, timeperiod=60, nbdev=1)  # 장기 표준편차
+        df["roc50"] = talib.ROC(close, timeperiod=50)  # 장기 ROC
+        df["mom50"] = talib.MOM(close, timeperiod=50)  # 장기 모멘텀
+        # 경기순환/위험지표 예시: OBV, MFI 등도 장기 적용
         df["obv"] = talib.OBV(close, volume)
-        df["mfi"] = talib.MFI(high, low, close, volume, timeperiod=14)
-        df["atr"] = talib.ATR(high, low, close, timeperiod=14)
-        df["trange"] = talib.TRANGE(high, low, close)
-        df["stddev20"] = talib.STDDEV(close, timeperiod=20, nbdev=1)
-        df["roc"] = talib.ROC(close, timeperiod=10)
-        df["mom"] = talib.MOM(close, timeperiod=10)
-        df["cdl_engulfing"] = talib.CDLENGULFING(open_, high, low, close)
-        df["cdl_hammer"] = talib.CDLHAMMER(open_, high, low, close)
+        df["mfi50"] = talib.MFI(high, low, close, volume, timeperiod=50)
 
     def _compute_micro_indicators(self):
         df = self.df_micro
-        close, high, low, volume, open_ = (
+        close, high, low, _, _ = (
             df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
         )
 
-        # 분봉용 지표: 일부 중복, 일부 간소화/특화 가능
-        df["sma5"] = talib.SMA(close, timeperiod=5)
-        df["sma20"] = talib.SMA(close, timeperiod=20)
-        df["ema12"] = talib.EMA(close, timeperiod=12)
-        df["ema26"] = talib.EMA(close, timeperiod=26)
-        df["bb_upper"], df["bb_mid"], df["bb_lower"] = talib.BBANDS(
-            close, timeperiod=20, nbdevup=2, nbdevdn=2
+        # 미시적(마이크로) 관점의 주요 지표 계산
+        # 초단기 모멘텀, 변동성, 시장 미세구조 등 빠른 신호 포착에 초점
+        df["sma3"] = talib.SMA(close, timeperiod=3)  # 초단기 이동평균
+        df["ema5"] = talib.EMA(close, timeperiod=5)  # 초단기 EMA
+        df["rsi7"] = talib.RSI(close, timeperiod=7)  # 초단기 RSI
+        df["stoch_k"], df["stoch_d"] = talib.STOCH(
+            high, low, close, fastk_period=5, slowk_period=3, slowd_period=3
         )
-        df["rsi14"] = talib.RSI(close, timeperiod=14)
-        df["stoch_k"], df["stoch_d"] = talib.STOCH(high, low, close)
         df["macd"], df["macd_signal"], df["macd_hist"] = talib.MACD(
-            close, fastperiod=12, slowperiod=26, signalperiod=9
+            close, fastperiod=6, slowperiod=13, signalperiod=4
+        )  # 초단기 MACD
+        df["atr5"] = talib.ATR(high, low, close, timeperiod=5)  # 초단기 ATR
+        df["stddev5"] = talib.STDDEV(close, timeperiod=5, nbdev=1)  # 초단기 표준편차
+        df["roc3"] = talib.ROC(close, timeperiod=3)  # 초단기 ROC
+        df["mom3"] = talib.MOM(close, timeperiod=3)  # 초단기 모멘텀
+        # 캔들패턴(미시적 신호) 예시
+        df["engulfing"] = talib.CDLENGULFING(
+            open=df["open"].astype(float), high=high, low=low, close=close
         )
-        # 마이크로 시장 특화: ATR, 표준편차, 모멘텀 등 빠른 변동성 지표 위주
-        df["atr"] = talib.ATR(high, low, close, timeperiod=14)
-        df["stddev20"] = talib.STDDEV(close, timeperiod=20, nbdev=1)
-        df["roc"] = talib.ROC(close, timeperiod=5)
-        df["mom"] = talib.MOM(close, timeperiod=5)
-        # 캔들패턴은 필요시 추가
+        df["hammer"] = talib.CDLHAMMER(
+            open=df["open"].astype(float), high=high, low=low, close=close
+        )
 
     def _draw_close_chart(
         self,

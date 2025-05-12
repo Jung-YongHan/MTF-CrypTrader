@@ -31,18 +31,17 @@ class RegimeAnalyzerResponse(BaseModel):
 
 class RegimeAnalyzer(AssistantAgent):
     def __init__(self):
+        self._client = OllamaChatCompletionClient(model="gemma3:4b")
         super().__init__(
             "regime_analyzer",
-            model_client=OllamaChatCompletionClient(
-                model=getenv("REGIME_ANALYZER_MODEL")
-            ),
+            model_client=OllamaChatCompletionClient(model="gemma3:4b"),
             output_content_type=RegimeAnalyzerResponse,
             system_message=(
                 """당신은 시장 레짐 분석가입니다.
-일일 OHLCV 데이터와 관련 기술 지표 값, 그리고 차트 이미지를 기반으로 현재 시장의 레짐을 분석한 후, 아래의 JSON 형식으로 결과를 출력해야 합니다.
+OHLCV 데이터와 관련 기술 지표 값, 그리고 차트 이미지를 기반으로 현재 시장의 레짐을 분석한 후, 아래의 JSON 형식으로 결과를 출력해야 합니다.
 
 ### 입력 데이터 구조
-- 가격 데이터: 일일 OHLCV 및 기술 지표를 포함한 JSON 형식의 데이터
+- 가격 데이터: OHLCV 및 기술 지표를 포함한 JSON 형식의 데이터
 - 차트 이미지: 동일한 데이터를 시각화한 캔들스틱 또는 라인 차트 이미지
 
 ### 출력 JSON 형식
@@ -73,6 +72,8 @@ class RegimeAnalyzer(AssistantAgent):
 
     async def analyze(self, price_data: Dict[str, Any], fig: Any) -> Dict[str, Any]:
         image = get_agentic_image(fig)
+        plt.close(fig)
+
         message = MultiModalMessage(
             content=[image, f"{price_data}"],
             source="data_preprocessor",
@@ -84,7 +85,10 @@ class RegimeAnalyzer(AssistantAgent):
         thoughts = content.thoughts
         regime_report = content.response
 
-        plt.close(fig)
-
-        await self.on_reset(cancellation_token=CancellationToken())
+        await self.close()
         return regime_report.dict()
+
+    async def close(self):
+        await self.on_reset(cancellation_token=CancellationToken())
+        await self._client.close()
+        await super().close()

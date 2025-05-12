@@ -155,7 +155,7 @@ class PortfolioManager:
         # 최고치 갱신 및 MDD 계산
         if current_value > self.peak_value:
             self.peak_value = current_value
-        drawdown = (self.peak_value - current_value) / self.peak_value
+        drawdown = (self.peak_value - current_value) / self.peak_value * 100
         if drawdown > self.max_drawdown:
             self.max_drawdown = drawdown
 
@@ -168,7 +168,7 @@ class PortfolioManager:
     def compute_return(self) -> float:
         """전체 수익률 계산"""
         final_value = self.portfolio_value_history[-1]["value"]
-        return (final_value - self.initial_value) / self.initial_value
+        return (final_value - self.initial_value) / self.initial_value * 100
 
     def compute_mdd(self) -> float:
         """최대 낙폭(MDD) 반환"""

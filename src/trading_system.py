@@ -107,8 +107,8 @@ class TradingSystem:
             macro_report_tmp["datetime"] = macro_tick["datetime"]
             self.macro_recode_manager.record_step(macro_report_tmp)
 
-            if abs(macro_report["exposure"]) < 1e-8:
-                print("No exposure, skipping micro analysis.")
+            if abs(macro_report["rate_limit"]) < 1e-8:
+                print("No rate_limit, skipping micro analysis.")
                 continue
 
             # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨

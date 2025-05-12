@@ -20,7 +20,7 @@ class RecordManager:
                 "datetime": "datetime64[ns]",
                 "regime": "object",
                 "confidence": "float64",
-                "exposure": "float64",
+                "rate_limit": "float64",
             }
         elif report_type == "micro":
             self.column_types = {

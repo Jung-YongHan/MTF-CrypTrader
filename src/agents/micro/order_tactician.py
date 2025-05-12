@@ -64,7 +64,7 @@ class OrderTactician(AssistantAgent):
     "macro_report": {
         "regime": "bull" | "bear" | "sideways" | "high_volatility",
         "confidence": 0.0 ~ 1.0,
-        "exposure": 0.0 ~ 1.0,
+        "rate_limit": 0.0 ~ 1.0,
     },
     "pulse_report": {
         "pulse": "long" | "short" | "none",
@@ -79,7 +79,7 @@ class OrderTactician(AssistantAgent):
 - macro_report: 일봉 데이터를 기반으로 한 시장 분석 리포트입니다.
     1. regime: 시장의 레짐 상태를 나타냅니다.
     2. confidence: 레짐 분류에 대한 확신도입니다.
-    3. exposure: 전체 자산 중 코인에 투자 가능한 최대 비율입니다.
+    3. rate_limit: 전체 자산 중 코인에 투자 가능한 최대 비율입니다.
 - pulse_report: 15분봉 데이터를 기반으로 한 단기 신호 리포트입니다.
     1. pulse: 돌파 신호의 종류를 나타냅니다.
     2. strength: 돌파 신호의 강도입니다.
@@ -102,10 +102,10 @@ class OrderTactician(AssistantAgent):
 
 ### 주문 결정 규칙
 - 보유 비율이 0인 경우: 해당 코인에 대한 매도("sell") 주문은 불가능합니다.
-- 최대 주문 한도: exposure 값은 해당 코인에 투자 가능한 최대 비율을 의미합니다. 기존 보유 비율을 고려하여, 추가 매수 또는 매도 가능한 최대 수량을 계산해야 합니다.
-- 강제 매도 조건: 현재 보유 비율이 exposure 값을 초과하는 경우, 초과분에 대해 매도 주문을 실행해야 합니다.
-- 보유 유지 조건: 현재 보유 비율이 exposure 값과 동일한 경우, 추가 매수 없이 보유를 유지해야 합니다.
-- 주문 수량 계산: 주문 수량은 exposure와 현재 보유 비율의 차이로 계산됩니다.
+- 최대 주문 한도: rate_limit 값은 해당 코인에 투자 가능한 최대 비율을 의미합니다. 기존 보유 비율을 고려하여, 추가 매수 또는 매도 가능한 최대 수량을 계산해야 합니다.
+- 강제 매도 조건: 현재 보유 비율이 rate_limit 값을 초과하는 경우, 초과분에 대해 매도 주문을 실행해야 합니다.
+- 보유 유지 조건: 현재 보유 비율이 rate_limit 값과 동일한 경우, 추가 매수 없이 보유를 유지해야 합니다.
+- 주문 수량 계산: 주문 수량은 rate_limit과과 현재 보유 비율의 차이로 계산됩니다.
 
 ### 추가 검증 규칙
 - 매도 오류:
@@ -118,12 +118,12 @@ class OrderTactician(AssistantAgent):
     → 매수 시에는 현금 비율 이하의 amount만 허용됩니다.
 
 - 노출 한도 초과 오류:
-    1. 현재 코인 비율이 exposure 값을 초과하는 경우
+    1. 현재 코인 비율이 rate_limit 값을 초과하는 경우
     → 초과분에 대해 매도 주문을 실행해야 합니다.
 
 ### 예시
-- 현재 보유 비율이 0.4이고, exposure가 0.5인 경우: 최대 매수 수량은 0.1
-- 현재 보유 비율이 0.4이고, exposure가 0.3인 경우: 최소 매도 수량은 0.1
+- 현재 보유 비율이 0.4이고, rate_limit이 0.5인 경우: 최대 매수 수량은 0.1
+- 현재 보유 비율이 0.4이고, rate_limit이 0.3인 경우: 최소 매도 수량은 0.1
 
 ### 예시 출력
 { "order": "buy", "amount": 0.5 }
@@ -148,7 +148,7 @@ class OrderTactician(AssistantAgent):
             source="data_preprocessor",
         )
         messages = [base_msg]
-        while True:
+        for _ in range(5):  # 최대 5회 반복
             try:
                 response = await self.run(task=messages)
                 content = response.messages[-1].content
@@ -164,21 +164,21 @@ class OrderTactician(AssistantAgent):
                 cash_ratio = ratios.get("cash", 0.0)
                 coin_ratio = sum(v for k, v in ratios.items() if k != "cash")
 
-                exposure = macro_report.get("exposure", 0.0)
+                rate_limit = macro_report.get("rate_limit", 0.0)
 
                 # 추가 검증: buy 오류
                 if order == "buy":
-                    if round(amount, 4) > round(exposure, 4):
+                    if round(amount, 4) > round(rate_limit, 4):
                         raise ValueError(
-                            "Buy amount {:.4f} exceeds exposure limit {:.4f}.".format(
-                                amount, exposure
+                            "Buy amount {:.4f} exceeds rate_limit limit {:.4f}.".format(
+                                amount, rate_limit
                             )
                         )
                     # 소수점 4자리까지 반올림하여 비교
-                    if round(coin_ratio + amount, 4) > round(exposure, 4):
+                    if round(coin_ratio + amount, 4) > round(rate_limit, 4):
                         raise ValueError(
-                            "Buy amount {:.4f} exceeds exposure limit {:.4f}.".format(
-                                amount, exposure
+                            "Buy amount {:.4f} exceeds rate_limit limit {:.4f}.".format(
+                                amount, rate_limit
                             )
                         )
 
@@ -192,11 +192,11 @@ class OrderTactician(AssistantAgent):
                         )
 
                 # 추가 검증: 코인 비율이 노출 한도를 초과하는 경우
-                if round(coin_ratio, 4) > round(exposure, 4):
+                if round(coin_ratio, 4) > round(rate_limit, 4):
                     # 오차 1% (0.01)까지는 허용
-                    if coin_ratio - exposure > 0.01:
+                    if coin_ratio - rate_limit > 0.01:
                         raise ValueError(
-                            f"현재 코인 보유 비율({coin_ratio:.4f})이 노출 한도({exposure:.4f})를 1% 이상 초과합니다. "
+                            f"현재 코인 보유 비율({coin_ratio:.4f})이 노출 한도({rate_limit:.4f})를 1% 이상 초과합니다. "
                             "초과된 비율만큼 매도 주문을 생성해야 합니다."
                         )
 
@@ -205,8 +205,7 @@ class OrderTactician(AssistantAgent):
             except ValidationError as e:
                 feedback = TextMessage(
                     content=(
-                        "⛔  JSON schema validation failed:\n"
-                        f"{e}\n\n"
+                        f"⛔  JSON schema validation failed: {e}\n"
                         "규칙:\n"
                         "1. order가 hold인 경우 amount는 0.0.\n"
                         "2. amount는 0.0 ~ 1.0 사이 실수값, 소수점 2자리까지 허용\n"
@@ -224,3 +223,10 @@ class OrderTactician(AssistantAgent):
                     source="validator",
                 )
             messages.append(feedback)
+
+        print("OrderTactician: 5회 반복 후에도 오류 발생, 보유 유지")
+        await self.on_reset(cancellation_token=CancellationToken())
+        return {
+            "order": "hold",
+            "amount": 0.0,
+        }

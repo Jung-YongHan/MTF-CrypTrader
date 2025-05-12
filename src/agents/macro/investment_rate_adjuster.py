@@ -12,36 +12,36 @@ from pydantic import BaseModel, ValidationError
 from src.portfoilo_manager import PortfolioManager
 
 
-class ExposureResponse(BaseModel):
-    exposure: float
+class RateResponse(BaseModel):
+    rate_limit: float
 
-    @pydantic.field_validator("exposure")
+    @pydantic.field_validator("rate_limit")
     @classmethod
-    def exposure_must_be_between_0_and_1(cls, v):
+    def rate_limit_must_be_between_0_and_1(cls, v):
         if not 0.0 <= v <= 1.0:
-            raise ValueError("exposure must be between 0 and 1")
+            raise ValueError("rate_limit must be between 0 and 1")
         # 소수점 2자리까지 허용
         if not isinstance(v, float) or len(str(v).split(".")[1]) > 2:
-            raise ValueError("exposure must be a float with 2 decimal places")
+            raise ValueError("rate_limit must be a float with 2 decimal places")
         return v
 
 
-class RegimeAnalyzerResponse(BaseModel):
+class InvestmentRateAdjusterResponse(BaseModel):
     thoughts: str
-    response: ExposureResponse
+    response: RateResponse
 
 
-class ExposureLimiter(AssistantAgent):
+class InvestmentRateAdjuster(AssistantAgent):
     def __init__(self):
         super().__init__(
-            "exposure_limiter",
+            "investment_rate_adjuster",
             model_client=OllamaChatCompletionClient(
-                model=getenv("EXPOSURE_LIMITER_MODEL")
+                model=getenv("INVESTMENT_RATE_ADJUSTER_MODEL")
             ),
-            output_content_type=RegimeAnalyzerResponse,
+            output_content_type=InvestmentRateAdjusterResponse,
             system_message=(
-                """당신은 노출 한도 관리자입니다.
-주어진 시장 분석 보고서(regime_report), 가격 데이터(price_data), 그리고 현재 포트폴리오 비율(portfolio_ratio)를 기반으로, 코인 자산에 대한 투자 노출 한도(exposure)를 결정해야 합니다.
+                """당신은 투자 비율 조정가입니다.
+주어진 시장 분석 보고서(regime_report), 가격 데이터(price_data), 그리고 현재 포트폴리오 비율(portfolio_ratio)를 기반으로, 코인 자산에 대한 최대 투자 비율(rate_limit)을 결정해야 합니다.
 
 ### 입력 데이터 구조
 {
@@ -70,30 +70,31 @@ class ExposureLimiter(AssistantAgent):
 
 ### 출력 데이터 구조
 {
-    "exposure": 0.0 ~ 1.0
+    "rate_limit": 0.0 ~ 1.0
 }
 
-- exposure: 코인 자산에 대한 투자 비율을 나타내는 0.0에서 1.0 사이의 실수값입니다. 소수점은 최대 두 자리까지 허용됩니다.
+- rate_limit: 코인 자산에 대한 투자 비율을 나타내는 0.0에서 1.0 사이의 실수값입니다. 소수점은 최대 두 자리까지 허용됩니다.
 
 
-### 노출 한도 정의
+### 투자 비율 정의
 - 0.0: 전체 자산을 현금으로 보유 (코인 투자 없음)
 - 0.5: 전체 자산의 50%를 코인에 투자
 - 1.0: 전체 자산을 코인에 투자
 
-###  결정 지침
-1. **시장 상태(regime)**와 **확신도(confidence)**를 고려하여 적절한 노출 한도를 결정합니다.
+### 결정 지침
+1. **시장 상태(regime)**와 **확신도(confidence)**를 고려하여 적절한 최대 투자 비율을 결정합니다.
 2. **가격 데이터(price_data)**의 기술적 지표를 분석하여 시장의 변동성과 추세를 평가합니다.
-3. **현재 포트폴리오 비율(portfolio_ratio)**을 참고하여 노출 한도를 조정합니다.
-4. 최종 결정된 exposure 값은 반드시 0.0에서 1.0 사이의 실수값이어야 하며, 소수점은 최대 두 자리까지 허용됩니다.
+3. 상승장에서는 최대 투자 비율을 높이고, 하락장 및 고변동성장에서는 낮추며, 횡보장에서는 중립적으로 유지합니다.
+4. **현재 포트폴리오 비율(portfolio_ratio)**을 참고하여 투자 비율을 조정합니다.
+5. 최종 결정된 투자 비율은 반드시 0.0에서 1.0 사이의 실수값이어야 하며, 소수점은 최대 두 자리까지 허용됩니다.
 
 ### 예시
-{ "exposure": 0.5 }
+{ "rate_limit": 0.5 }
 """
             ),
         )
 
-    async def limit_exposure(
+    async def adjust_rate_limit(
         self,
         regime_report: Dict[str, Any],
         price_data: Dict[str, Any],
@@ -113,23 +114,23 @@ class ExposureLimiter(AssistantAgent):
             try:
                 response = await self.run(task=message)
                 content = response.messages[-1].content
-                ExposureResponse.model_validate({"exposure": content.response.exposure})
+                RateResponse.model_validate({"rate_limit": content.response.rate_limit})
 
                 thoughts = content.thoughts
-                exposure = content.response.exposure
+                rate_limit = content.response.rate_limit
 
-                regime_report_including_exposure = regime_report.copy()
-                regime_report_including_exposure["exposure"] = exposure
+                regime_report_including_rate_limit = regime_report.copy()
+                regime_report_including_rate_limit["rate_limit"] = rate_limit
 
                 await self.on_reset(cancellation_token=CancellationToken())
-                return regime_report_including_exposure
+                return regime_report_including_rate_limit
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
                     content=(
                         "JSON schema validation failed:"
                         f"{e}\n\n"
                         "규칙:\n"
-                        "- exposure는 0.0 ~ 1.0 사이 소수점 두 자리.\n"
+                        "- rate_limit은 0.0 ~ 1.0 사이 소수점 두 자리.\n"
                     ),
                     source="validator",
                 )

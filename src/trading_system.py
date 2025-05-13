@@ -96,9 +96,12 @@ class TradingSystem:
             print(f"Macro Report: {macro_report}")
             macro_report_tmp = macro_report.copy()
             macro_report_tmp["datetime"] = macro_tick["datetime"]
+            macro_report_tmp["regime"] = macro_report["regime_report"]["regime"]
+            macro_report_tmp["confidence"] = macro_report["regime_report"]["confidence"]
+            macro_report_tmp["rate_limit"] = macro_report["limit_report"]["rate_limit"]
             self.macro_recode_manager.record_step(macro_report_tmp)
 
-            if abs(macro_report["rate_limit"]) < 1e-8:
+            if abs(macro_report["limit_report"]["rate_limit"]) < 1e-8:
                 print("No rate_limit, skipping micro analysis.")
                 continue
 
@@ -158,8 +161,9 @@ class TradingSystem:
         end_time = time()
         print(f"Total time taken for backtest: {end_time - start_time:.2f} seconds")
 
+        print(df_micro.iloc[-1])
         await self.portfolio_manager.sell_all(
-            price=self.df_macro.iloc[-1]["close"],
+            price_data=df_micro.iloc[-1].to_dict(),
         )
 
         print("Backtest completed.")

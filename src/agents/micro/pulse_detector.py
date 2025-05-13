@@ -6,6 +6,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import MultiModalMessage, TextMessage
 from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 from matplotlib import pyplot as plt
 from pydantic import BaseModel, ValidationError
 
@@ -13,7 +14,7 @@ from src.utils.image_utils import get_agentic_image
 
 
 class PulseResponse(BaseModel):
-    pulse: Literal["매수 돌파", "매도 돌파", "돌파 없음"]
+    pulse: Literal["상승 돌파", "하락 돌파", "돌파 없음"]
     strength: float
 
     @pydantic.field_validator("strength")
@@ -34,28 +35,31 @@ class PulseDetectorResponse(BaseModel):
 
 class PulseDetector(AssistantAgent):
     def __init__(self):
-        self._client = OllamaChatCompletionClient(model="gemma3:4b")
+        self._client = OllamaChatCompletionClient(model="gemma3:27b")
+        # self._client = OpenAIChatCompletionClient(
+        #     model="gpt-4o-mini", api_key=getenv("OPENAI_API_KEY")
+        # )
         super().__init__(
             "pulse_detector",
             model_client=self._client,
             output_content_type=PulseDetectorResponse,
             system_message=(
                 """당신은 펄스 감지자입니다.
-주어진 15분봉 수준의 가격 데이터(OHLCV 및 기술적 분석 지표)와 차트 이미지를 분석하여, 현재 시장의 돌파(pulse) 여부와 그 강도(strength)를 판단하고, 아래의 JSON 형식으로 결과를 출력해야 합니다.
+주어진 가격 데이터(OHLCV 및 기술적 분석 지표)와 차트 이미지를 분석하여, 현재 시장의 돌파(pulse) 여부와 그 강도(strength)를 판단하고, 아래의 JSON 형식으로 결과를 출력해야 합니다.
 
 ### 입력 데이터 구조
-- 가격 데이터: 15분봉 수준의 OHLCV 및 기술적 지표를 포함한 JSON 형식의 데이터
+- 가격 데이터: OHLCV 및 기술적 지표를 포함한 JSON 형식의 데이터
 - 차트 이미지: 해당 가격 데이터를 시각화한 차트 이미지
 
 ### 출력 JSON 형식
 {
-    "pulse": "매수 돌파" | "매도 돌파" | "돌파 없음",
+    "pulse": "상승 돌파" | "하락 돌파" | "돌파 없음",
     "strength": 0.0 ~ 1.0
 }
 
 - pulse: 감지된 돌파 신호의 종류를 나타냅니다.
-    1. "매수 돌파": 상승 방향의 돌파 신호
-    2. "매도 돌파": 하락 방향의 돌파 신호
+    1. "상승 돌파": 상승 방향의 돌파 신호
+    2. "하락 돌파": 하락 방향의 돌파 신호
     3. "돌파 없음": 유의미한 돌파 신호 없음
 - strength: 감지된 돌파 신호의 강도를 나타내는 0.0에서 1.0 사이의 실수값입니다. 소수점은 최대 두 자리까지 허용됩니다.
     - 0.0부터 1.0 사이의 실수값
@@ -64,8 +68,8 @@ class PulseDetector(AssistantAgent):
     - 1.0: 매우 높은 신뢰도
 
 ### 예시
-{ "pulse": "매수 돌파", "strength": 0.8 }
-{ "pulse": "매도 돌파", "strength": 0.5 }
+{ "pulse": "상승 돌파", "strength": 0.8 }
+{ "pulse": "하락 돌파", "strength": 0.5 }
 { "pulse": "돌파 없음", "strength": 0.2 }
     """
             ),
@@ -90,15 +94,18 @@ class PulseDetector(AssistantAgent):
                 thoughts = content.thoughts
                 pulse_report = content.response
 
+                report = pulse_report.dict()
+                report["reason"] = thoughts
+
                 await self.close()
-                return pulse_report.dict()
+                return report
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
                     content=(
                         "JSON schema validation failed:"
                         f"{e}\n\n"
                         "규칙:\n"
-                        "1. pulse는 '매수 돌파', '매도 돌파', '돌파 없음' 중 하나.\n"
+                        "1. pulse는 '상승 돌파', '하락 돌파', '돌파 없음' 중 하나.\n"
                         " strength는 0.0 ~ 1.0 사이 소수점 두 자리.\n"
                     ),
                     source="validator",
@@ -107,5 +114,5 @@ class PulseDetector(AssistantAgent):
 
     async def close(self):
         await self.on_reset(cancellation_token=CancellationToken())
-        await self._client.close()
-        await super().close()
+        # await self._client.close()
+        # await super().close()

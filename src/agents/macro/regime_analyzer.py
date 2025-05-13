@@ -6,6 +6,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import MultiModalMessage
 from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 from matplotlib import pyplot as plt
 from pydantic import BaseModel
 
@@ -31,10 +32,13 @@ class RegimeAnalyzerResponse(BaseModel):
 
 class RegimeAnalyzer(AssistantAgent):
     def __init__(self):
-        self._client = OllamaChatCompletionClient(model="gemma3:4b")
+        self._client = OllamaChatCompletionClient(model="gemma3:27b")
+        # self._client = OpenAIChatCompletionClient(
+        #     model="gpt-4o-mini", api_key=getenv("OPENAI_API_KEY")
+        # )
         super().__init__(
             "regime_analyzer",
-            model_client=OllamaChatCompletionClient(model="gemma3:4b"),
+            model_client=self._client,
             output_content_type=RegimeAnalyzerResponse,
             system_message=(
                 """당신은 시장 레짐 분석가입니다.
@@ -85,10 +89,13 @@ OHLCV 데이터와 관련 기술 지표 값, 그리고 차트 이미지를 기�
         thoughts = content.thoughts
         regime_report = content.response
 
+        report = regime_report.dict()
+        report["reason"] = thoughts
+
         await self.close()
-        return regime_report.dict()
+        return report
 
     async def close(self):
         await self.on_reset(cancellation_token=CancellationToken())
-        await self._client.close()
-        await super().close()
+        # await self._client.close()
+        # await super().close()

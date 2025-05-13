@@ -7,6 +7,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
 from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
 from src.portfoilo_manager import PortfolioManager
@@ -21,12 +22,12 @@ class OrderResponse(BaseModel):
     def amount_must_be_between_0_and_1(cls, v):
         if not 0.0 <= v <= 1.0:
             raise ValueError("amount must be between 0 and 1")
-        # 소수점 2자리까지 허용
+        # 소수점 3자리로 강제
         if not isinstance(v, float):
-            raise ValueError("amount must be a float with 2 decimal places")
+            raise ValueError("amount must be a float with 3 decimal places")
         parts = str(v).split(".")
-        if len(parts) == 2 and len(parts[1]) > 2:
-            raise ValueError("amount must be a float with 2 decimal places")
+        if len(parts) == 3 and len(parts[1]) > 3:
+            return float(".".join(parts[:2]))
         return v
 
     @pydantic.model_validator(mode="after")
@@ -44,81 +45,97 @@ class OrderTacticianResponse(BaseModel):
 
 class OrderTactician(AssistantAgent):
     def __init__(self):
-        self._client = OllamaChatCompletionClient(model="gemma3:4b")
+        self._client = OllamaChatCompletionClient(model="gemma3:27b")
+        # self._client = OpenAIChatCompletionClient(
+        #     model="gpt-4o-mini", api_key=getenv("OPENAI_API_KEY")
+        # )
         super().__init__(
             "order_tactician",
             model_client=self._client,
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 주문 전술가입니다.
-주어진 매크로 리포트(macro_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 코인에 대한 적절한 주문(order)과 주문 수량(amount)을 결정해야 합니다.
+주어진 매크로 리포트(macro_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
 
 ### 입력 데이터 구조
 {
     "macro_report": {
-        "regime": "bull" | "bear" | "sideways" | "high_volatility",
-        "confidence": 0.0 ~ 1.0,
-        "rate_limit": 0.0 ~ 1.0,
+        "regime_report" {
+            "regime": str,
+            "confidence": float,
+            "reason": str
+        }
+        "limit_report": {
+            "rate_limit": float,
+            "reason": str
+        }
     },
     "pulse_report": {
-        "pulse": "long" | "short" | "none",
-        "strength": 0.0 ~ 1.0,
+        "pulse": str,
+        "strength": float,
+        "reason": str
     },
     "portfolio_ratio": {
         "cash": float,
         "btc": float
     },
 }
+- macro_report
+    - regime: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장, 고변동성장)
+    - confidence: 레짐 분류에 대한 신뢰도 (0.0 ~ 1.0)
+    - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
+- pulse_report
+    - pulse: 단기 시장 신호 (상승 돌파 / 하락 돌파 / 돌파 없음)
+    - strength: 해당 신호의 강도 (0.0 ~ 1.0)
+- portfolio_ratio
+    - cash: 현금 비율 (0.0 ~ 1.0)
+    - btc: 코인(btc) 비율 (0.0 ~ 1.0)
+    - 현금 비율과 코인(btc) 비율의 합은 항상 1.0.
 
-- macro_report: 일봉 데이터를 기반으로 한 시장 분석 리포트입니다.
-    1. regime: 시장의 레짐 상태를 나타냅니다.
-    2. confidence: 레짐 분류에 대한 확신도입니다.
-    3. rate_limit: 전체 자산 중 코인에 투자 가능한 최대 비율입니다.
-- pulse_report: 15분봉 데이터를 기반으로 한 단기 신호 리포트입니다.
-    1. pulse: 돌파 신호의 종류를 나타냅니다.
-    2. strength: 돌파 신호의 강도입니다.
-- portfolio_ratio: 현재 포트폴리오 내 자산 비율을 나타냅니다.
-    예시: {"cash": 0.6, "btc": 0.4}
 
 ### 출력 데이터 구조
 {
-    "order": "buy" | "sell" | "hold",
+    "order": str,
     "amount": float
 }
+- order: 수행할 주문 종류
+    - "buy": 매수
+    - "sell": 매도
+    - "hold": 보유
+- amount: 주문 수량
+    - hold일 경우 반드시 0.0
 
-- order: 수행할 주문의 종류입니다.
-    1. "buy": 매수 주문
-    2. "sell": 매도 주문
-    3. "hold": 보유 유지
-- amount: 주문 수량을 나타내는 0.0 ~ 1.0 사이의 실수값입니다.
-    소수점은 최대 두 자리까지 허용됩니다.
-    "hold" 주문의 경우, amount는 반드시 0.0이어야 합니다.
-
+    
 ### 주문 결정 규칙
-- 보유 비율이 0인 경우: 해당 코인에 대한 매도("sell") 주문은 불가능합니다.
-- 최대 주문 한도: rate_limit 값은 해당 코인에 투자 가능한 최대 비율을 의미합니다. 기존 보유 비율을 고려하여, 추가 매수 또는 매도 가능한 최대 수량을 계산해야 합니다.
-- 이때, 시장 상황과 펄스 신호를 신중하게 고려하여 매수("buy") 또는 매도("sell") 주문을 결정합니다.
-- 강제 매도 조건: 현재 보유 비율이 rate_limit 값을 초과하는 경우, 초과분에 대해 매도 주문을 실행해야 합니다.
-- 보유 유지 조건: 현재 보유 비율이 rate_limit 값과 동일한 경우, 추가 매수 없이 보유를 유지해야 합니다.
-- 주문 수량 계산: 주문 수량은 rate_limit과과 현재 보유 비율의 차이로 계산됩니다.
+1. 매수("buy"):
+    - 코인 비중이 rate_limit보다 작을 때만 매수 가능
+    - 매수 가능 최대 수량은 rate_limit - 현재 btc 비율
+    - 매수하려는 amount는 보유한 cash보다 작거나 같아야 함
+2. 매도("sell"):
+    - 단순히 btc 비율 > rate_limit인 상황이라도 강제 매도하지 마세요
+        - 상승장 또는 강한 상승 돌파 시에는 초과 상태를 유지하며 hold 가능
+    - 매도는 오직 거시/미시 리포트가 하락을 강하게 시사할 때만 선택
+    - 매도하려는 amount는 보유한 btc보다 작거나 같아야 함
+3. 보유("hold"):
+    - 상승 시그널이 강하지만 이미 rate_limit을 초과한 경우 → 보유 유지
+    - 현금이 부족하여 매수를 못하는 경우 → 보유 유지
+    - btc가 없어서 매도를 못하는 경우 → 보유 유지
 
-### 추가 검증 규칙
-- 매도 오류:
-    1. portfolio_ratio의 코인 비율이 0일 때, 매도("sell") 주문을 시도한 경우
-    2. 코인 비율이 존재하지만, 매도 주문의 amount가 코인 비율보다 큰 경우
-    → 매도 시에는 코인 비율 이하의 amount만 허용됩니다.
+### 주문 검증 규칙
 - 매수 오류:
-    1. portfolio_ratio의 현금 비율이 0일 때, 매수("buy") 주문을 시도한 경우
-    2. 현금 비율이 존재하지만, 매수 주문의 amount가 현금 비율보다 큰 경우
-    → 매수 시에는 현금 비율 이하의 amount만 허용됩니다.
-
-- 노출 한도 초과 오류:
-    1. 현재 코인 비율이 rate_limit 값을 초과하는 경우
-    → 초과분에 대해 매도 주문을 실행해야 합니다.
+    - 현금이 0일 때 매수 시도
+    - 매수 수량이 보유 현금보다 많을 경우
+- 매도 오류:
+    - btc가 0일 때 매도 시도
+    - 매도 수량이 보유 btc보다 많을 경우
 
 ### 예시
-- 현재 보유 비율이 0.4이고, rate_limit이 0.5인 경우: 최대 매수 수량은 0.1
-- 현재 보유 비율이 0.4이고, rate_limit이 0.3인 경우: 최소 매도 수량은 0.1
+- 매수 예
+    - 보유 btc: 0.4 / rate_limit: 0.5 -> 최대 매수 가능: 0.1
+- 매도 예 (정당한 사유 필요)
+    - 보유 btc: 0.5 / rate_limit: 0.3
+        - 단, 시장이 약세일 때만 매도 고려
+        - 상승 시그널이면 hold 유지 가능
 
 ### 예시 출력
 { "order": "buy", "amount": 0.5 }
@@ -159,7 +176,7 @@ class OrderTactician(AssistantAgent):
                 cash_ratio = ratios.get("cash", 0.0)
                 coin_ratio = sum(v for k, v in ratios.items() if k != "cash")
 
-                rate_limit = macro_report.get("rate_limit", 0.0)
+                rate_limit = macro_report["limit_report"]["rate_limit"]
 
                 # 추가 검증: buy 오류
                 if order == "buy":
@@ -186,24 +203,17 @@ class OrderTactician(AssistantAgent):
                             )
                         )
 
-                # 추가 검증: 코인 비율이 노출 한도를 초과하는 경우
-                if round(coin_ratio, 4) > round(rate_limit, 4):
-                    # 오차 1% (0.01)까지는 허용
-                    if coin_ratio - rate_limit > 0.01:
-                        raise ValueError(
-                            f"현재 코인 보유 비율({coin_ratio:.4f})이 노출 한도({rate_limit:.4f})를 1% 이상 초과합니다. "
-                            "초과된 비율만큼 매도 주문을 생성해야 합니다."
-                        )
+                report = content.response.model_dump()
+                report["reason"] = thoughts
 
                 await self.close()
-                return content.response.model_dump()
+                return report
             except ValidationError as e:
                 feedback = TextMessage(
                     content=(
                         f"⛔  JSON schema validation failed: {e}\n"
                         "규칙:\n"
                         "1. order가 hold인 경우 amount는 0.0.\n"
-                        "2. amount는 0.0 ~ 1.0 사이 실수값, 소수점 2자리까지 허용\n"
                     ),
                     source="validator",
                 )
@@ -213,11 +223,11 @@ class OrderTactician(AssistantAgent):
                         f"⛔  Order rule validation failed: {e}\n"
                         "- sell 시에는 coin 비율 이하의 amount만 허용됩니다.\n"
                         "- buy 시에는 cash 비율 이하의 amount만 허용됩니다.\n"
-                        "- 현재 코인 보유 비율이 노출 한도를 초과하는 경우, 초과된 비율만큼 매도 주문을 생성해야 합니다."
                     ),
                     source="validator",
                 )
             messages.append(feedback)
+            print(messages)
         print("OrderTactician: 5회 반복 후에도 오류 발생, 보유 유지")
         await self.close()
         return {
@@ -227,5 +237,5 @@ class OrderTactician(AssistantAgent):
 
     async def close(self):
         await self.on_reset(cancellation_token=CancellationToken())
-        await self._client.close()
-        await super().close()
+        # await self._client.close()
+        # await super().close()

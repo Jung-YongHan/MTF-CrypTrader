@@ -7,6 +7,7 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
 from autogen_core import CancellationToken
 from autogen_ext.models.ollama import OllamaChatCompletionClient
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 from pydantic import BaseModel, ValidationError
 
 from src.portfoilo_manager import PortfolioManager
@@ -33,7 +34,10 @@ class InvestmentRateAdjusterResponse(BaseModel):
 
 class InvestmentRateAdjuster(AssistantAgent):
     def __init__(self):
-        self._client = OllamaChatCompletionClient(model="gemma3:4b")
+        self._client = OllamaChatCompletionClient(model="gemma3:27b")
+        # self._client = OpenAIChatCompletionClient(
+        #     model="gpt-4o-mini", api_key=getenv("OPENAI_API_KEY")
+        # )
         super().__init__(
             "investment_rate_adjuster",
             model_client=self._client,
@@ -46,7 +50,8 @@ class InvestmentRateAdjuster(AssistantAgent):
 {
     "regime_report": {
         "regime": "상승장" | "하락장" | "횡보장" | "고변동성장",
-        "confidence": 0.0 ~ 1.0
+        "confidence": 0.0 ~ 1.0,
+        "reason": "regime 판단 이유"
     },
     "price_data": {
         "timestamp": "2025-01-01 09:00:00",
@@ -63,7 +68,7 @@ class InvestmentRateAdjuster(AssistantAgent):
     }
 }
 
-- regime_report: 시장의 현재 상태와 그에 대한 확신도를 나타냅니다.
+- regime_report: 시장의 현재 상태와 그에 대한 확신도 및 근거를 나타냅니다.
 - price_data: OHLCV 및 기타 기술적 지표를 포함한 일일 가격 데이터입니다.
 - portfolio_ratio: 현재 포트폴리오에서 현금과 코인 자산의 비율을 나타냅니다.
 
@@ -71,9 +76,7 @@ class InvestmentRateAdjuster(AssistantAgent):
 {
     "rate_limit": 0.0 ~ 1.0
 }
-
 - rate_limit: 코인 자산에 대한 투자 비율을 나타내는 0.0에서 1.0 사이의 실수값입니다. 소수점은 최대 두 자리까지 허용됩니다.
-
 
 ### 투자 비율 정의
 - 0.0: 전체 자산을 현금으로 보유 (코인 투자 없음)
@@ -118,11 +121,16 @@ class InvestmentRateAdjuster(AssistantAgent):
                 thoughts = content.thoughts
                 rate_limit = content.response.rate_limit
 
-                regime_report_including_rate_limit = regime_report.copy()
-                regime_report_including_rate_limit["rate_limit"] = rate_limit
+                report = {
+                    "regime_report": regime_report,
+                    "limit_report": {
+                        "rate_limit": rate_limit,
+                        "reason": thoughts,
+                    },
+                }
 
                 await self.close()
-                return regime_report_including_rate_limit
+                return report
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
                     content=(
@@ -137,5 +145,5 @@ class InvestmentRateAdjuster(AssistantAgent):
 
     async def close(self):
         await self.on_reset(cancellation_token=CancellationToken())
-        await self._client.close()
-        await super().close()
+        # await self._client.close()
+        # await super().close()

@@ -5,10 +5,15 @@ import pandas as pd
 
 
 class RecordManager:
-    def __init__(self, coin: str, regime: str, report_type: str):
+    def __init__(
+        self, coin: str, regime: str, report_type: str, only_macro: bool = False
+    ):
+        folder_path = "only_macro" if only_macro else "results"
+
         self.folder_path = os.path.abspath(
             os.path.join(
-                os.path.dirname(__file__), f"../data/results/{regime}/{report_type}"
+                os.path.dirname(__file__),
+                f"../data/{folder_path}/{regime}/{report_type}",
             )
         )
         os.makedirs(self.folder_path, exist_ok=True)

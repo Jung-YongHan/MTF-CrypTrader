@@ -22,6 +22,7 @@ class TradingSystem:
         coin: str,
         macro_tick: str,
         micro_tick: str,
+        only_macro: bool = False,
         initial_balance: float = 10_000_000,
     ):
         self.regime = regime
@@ -31,6 +32,7 @@ class TradingSystem:
         self.initial_balance = initial_balance
         self.macro_tick = macro_tick
         self.micro_tick = micro_tick
+        self.only_macro = only_macro
 
         def load_data(tick):
             """
@@ -52,8 +54,9 @@ class TradingSystem:
             & (pd.to_datetime(df_micro_full["datetime"]) < self.end_date)
         ]
 
+        interval_minutes = 1440 * 30 if only_macro else 1440
         self.portfolio_manager = PortfolioManager(
-            coin=coin, cash=initial_balance, interval_minutes=1440
+            coin=coin, cash=initial_balance, interval_minutes=interval_minutes
         )
 
         self.data_preprocessor = DataPreprocessor(self.df_macro, self.df_micro)
@@ -62,16 +65,26 @@ class TradingSystem:
         self.trade_executor = TradeExecutor()
 
         self.macro_recode_manager = RecordManager(
-            coin=coin, regime=regime, report_type="macro"
+            coin=coin, regime=regime, report_type="macro", only_macro=only_macro
         )
         self.micro_recode_manager = RecordManager(
             coin=coin, regime=regime, report_type="micro"
         )
         self.trade_recode_manager = RecordManager(
-            coin=coin, regime=regime, report_type="trade"
+            coin=coin, regime=regime, report_type="trade", only_macro=only_macro
         )
 
     async def run(self) -> None:
+        print("Starting backtest...")
+        print(f"Regime: {self.regime}")
+        print(f"Start date: {self.start_date}")
+        print(f"End date: {self.end_date}")
+        print(f"Coin: {self.coin}")
+        print(f"Macro tick: {self.macro_tick}")
+        print(f"Micro tick: {self.micro_tick}")
+        print(f"Only macro: {self.only_macro}")
+        print(f"Initial balance: {self.initial_balance}")
+
         # 1. 매크로 단위 데이터를 순회
         start_time = time()
         for index, macro_tick in self.df_macro.iterrows():
@@ -105,65 +118,110 @@ class TradingSystem:
                 print("No rate_limit, skipping micro analysis.")
                 continue
 
-            # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨
-            df_micro = self.get_micro_data_for_day(macro_tick=macro_tick)
-            # 5. 마이크로 시장 분석 및 투자 진행
-            # 이전 마이크로 분석 리포트 초기화(시가에 구매를 위해)
-            micro_report = None
-            for index, micro_tick in df_micro.iterrows():
-                micro_dict = micro_tick.to_dict()
+            if self.only_macro:
+                self.portfolio_manager.update_portfolio_ratio(price_data=macro_dict)
 
-                self.portfolio_manager.update_portfolio_ratio(price_data=micro_dict)
+                # 4. 매크로 시장의 투자 한도에 따라 매매 결정
+                regime = macro_report["regime_report"]["regime"]
+                rate_limit = macro_report["limit_report"]["rate_limit"]
+                coin_ratio = self.portfolio_manager.get_portfolio_ratio()[self.coin]
 
-                # 5.1 시가에 대해서 매도/매수/보유 결정
+                # 5. 매매 결정
+                if regime == "상승장":
+                    if rate_limit > coin_ratio:
+                        order = "buy"
+                        amount = rate_limit - coin_ratio
+                    else:
+                        order = "hold"
+                        amount = 0.0
+                elif regime == "하락장":
+                    if rate_limit < coin_ratio:
+                        order = "sell"
+                        amount = coin_ratio - rate_limit
+                    else:
+                        order = "hold"
+                        amount = 0.0
+                else:
+                    order = "hold"
+                    amount = 0.0
+
                 await self.trade_executor.execute(
-                    price_data=micro_dict,
+                    price_data=macro_dict,
                     coin=self.coin,
-                    micro_report=micro_report,
+                    micro_report={
+                        "order_report": {
+                            "order": order,
+                            "amount": amount,
+                        }
+                    },
                 )
 
                 trade_report = {
-                    "datetime": micro_dict["datetime"],
+                    "datetime": macro_dict["datetime"],
                     **self.portfolio_manager.get_performance(),
                 }
                 self.trade_recode_manager.record_step(trade_report)
 
-                print(f"## {micro_tick['datetime']} 틱 ##")
+            else:
+                # 4. 해당 매크로 단위 캔들에 속해있는 마이크로 데이터만 필터, self.df_micro와 구분됨
+                df_micro = self.get_micro_data_for_day(macro_tick=macro_tick)
+                # 5. 마이크로 시장 분석 및 투자 진행
+                # 이전 마이크로 분석 리포트 초기화(시가에 구매를 위해)
+                micro_report = None
+                for index, micro_tick in df_micro.iterrows():
+                    micro_dict = micro_tick.to_dict()
 
-                # 6. 현재까지의 마이크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
-                price_data, fig = self.data_preprocessor.update_and_get_price_data(
-                    row=micro_dict,
-                    timeframe="micro",
-                    save_path=f"data/close_charts/{self.regime}/{index+1}_micro_chart",
+                    self.portfolio_manager.update_portfolio_ratio(price_data=micro_dict)
+
+                    # 5.1 시가에 대해서 매도/매수/보유 결정
+                    await self.trade_executor.execute(
+                        price_data=micro_dict,
+                        coin=self.coin,
+                        micro_report=micro_report,
+                    )
+
+                    trade_report = {
+                        "datetime": micro_dict["datetime"],
+                        **self.portfolio_manager.get_performance(),
+                    }
+                    self.trade_recode_manager.record_step(trade_report)
+
+                    print(f"## {micro_tick['datetime']} 틱 ##")
+
+                    # 6. 현재까지의 마이크로 단위 데이터를 활용, 가격적 분석 지표 추가 및 차트 생성
+                    price_data, fig = self.data_preprocessor.update_and_get_price_data(
+                        row=micro_dict,
+                        timeframe="micro",
+                        save_path=f"data/close_charts/{self.regime}/{index+1}_micro_chart",
+                    )
+
+                    # 7. 마이크로 시장 분석 및 주문 결정
+                    micro_report = await self.micro_analysis_team.analyze(
+                        price_data=price_data,
+                        fig=fig,
+                        macro_report=macro_report,
+                    )
+
+                    print(f"Micro Report: {micro_report}")
+                    micro_report_tmp = {
+                        "datetime": micro_tick["datetime"],
+                        "pulse": micro_report["pulse_report"]["pulse"],
+                        "strength": micro_report["pulse_report"]["strength"],
+                        "order": micro_report["order_report"]["order"],
+                        "amount": micro_report["order_report"]["amount"],
+                    }
+                    self.micro_recode_manager.record_step(micro_report_tmp)
+
+                macro_end_time = time()
+                print(
+                    f"Macro analysis time: {macro_end_time - macro_start_time:.2f} seconds"
                 )
-
-                # 7. 마이크로 시장 분석 및 주문 결정
-                micro_report = await self.micro_analysis_team.analyze(
-                    price_data=price_data,
-                    fig=fig,
-                    macro_report=macro_report,
-                )
-
-                print(f"Micro Report: {micro_report}")
-                micro_report_tmp = {
-                    "datetime": micro_tick["datetime"],
-                    "pulse": micro_report["pulse_report"]["pulse"],
-                    "strength": micro_report["pulse_report"]["strength"],
-                    "order": micro_report["order_report"]["order"],
-                    "amount": micro_report["order_report"]["amount"],
-                }
-                self.micro_recode_manager.record_step(micro_report_tmp)
-
-            macro_end_time = time()
-            print(
-                f"Macro analysis time: {macro_end_time - macro_start_time:.2f} seconds"
-            )
         end_time = time()
         print(f"Total time taken for backtest: {end_time - start_time:.2f} seconds")
 
-        print(df_micro.iloc[-1])
+        print(self.df_macro.iloc[-1])
         await self.portfolio_manager.sell_all(
-            price_data=df_micro.iloc[-1].to_dict(),
+            price_data=self.df_macro.iloc[-1].to_dict(),
         )
 
         print("Backtest completed.")
@@ -210,6 +268,7 @@ class AsyncTradingSystem(TradingSystem):
         coin: str,
         macro_tick: str,
         micro_tick: str,
+        only_macro: bool = False,
     ):
         super().__init__(
             regime=regime,
@@ -218,6 +277,7 @@ class AsyncTradingSystem(TradingSystem):
             coin=coin,
             macro_tick=macro_tick,
             micro_tick=micro_tick,
+            only_macro=only_macro,
         )
 
     def run(self):
@@ -231,6 +291,7 @@ def create_system(
     coin: str,
     macro_tick: str,
     micro_tick: str,
+    only_macro: bool = False,
 ):
     import warnings
 
@@ -245,6 +306,7 @@ def create_system(
         coin=coin,
         macro_tick=macro_tick,
         micro_tick=micro_tick,
+        only_macro=only_macro,
     )
 
 

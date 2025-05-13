@@ -49,7 +49,7 @@ class InvestmentRateAdjuster(AssistantAgent):
 ### 입력 데이터 구조
 {
     "regime_report": {
-        "regime": "상승장" | "하락장" | "횡보장" | "고변동성장",
+        "regime": "상승장" | "하락장" | "횡보장",
         "confidence": 0.0 ~ 1.0,
         "reason": "regime 판단 이유"
     },

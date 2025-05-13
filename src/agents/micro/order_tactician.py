@@ -81,7 +81,7 @@ class OrderTactician(AssistantAgent):
     },
 }
 - macro_report
-    - regime: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장, 고변동성장)
+    - regime: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
     - confidence: 레짐 분류에 대한 신뢰도 (0.0 ~ 1.0)
     - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
 - pulse_report

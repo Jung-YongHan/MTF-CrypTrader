@@ -11,6 +11,7 @@ app = create_system(
     coin="btc",
     macro_tick="month1",
     micro_tick="day1",
+    only_macro=True,
 )
 
 # app = create_system(

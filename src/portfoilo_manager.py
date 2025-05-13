@@ -54,7 +54,9 @@ class PortfolioManager:
         # 연환산을 위한 인터벌 길이(분 단위), 15분봉이라면 15를 입력
         self.interval_minutes = interval_minutes
 
-    async def update_portfolio_ratio(self, price_data: Dict[str, Any]) -> None:
+    async def update_portfolio_ratio(
+        self, price_data: Dict[str, Any], is_sell_all: bool = False
+    ) -> None:
         """_summary_
         매 캔들마다 포트폴리오 비율을 업데이트합니다.
         현재 현금과 코인의 비율을 캔들 시가 기준으로 업데이트합니다.
@@ -67,7 +69,10 @@ class PortfolioManager:
         """
 
         date = price_data.get("datetime")
-        price = price_data.get("open")
+        if is_sell_all:
+            price = price_data.get("close")
+        else:
+            price = price_data.get("open")
 
         cash_amount = self.portfolio.get("cash")  # 현금 보유량
         coin_amount = self.portfolio.get(self.coin)  # 코인 보유량
@@ -132,7 +137,7 @@ class PortfolioManager:
     # 모든 코인을 주어진 코인 가격에 맞게 현금으로 판매
     async def sell_all(self, price_data: Dict[str, Any]) -> None:
         """_summary_
-        모든 코인을 주어진 코인 가격에 맞게 현금으로 판매합니다.
+        모든 코인을 해당 날의 종가에 판매합니다.
 
         Args:
             price_data (Dict[str, Any]): 가격 데이터
@@ -143,11 +148,11 @@ class PortfolioManager:
         if self.coin not in self.portfolio:
             raise ValueError(f"Coin {self.coin} not in portfolio.")
 
-        price = price_data["open"]
+        price = price_data["close"]
         coin_amount = self.portfolio[self.coin]
         self.portfolio["cash"] += (coin_amount * price) * (1 - self.fee)
         self.portfolio[self.coin] = 0
-        await self.update_portfolio_ratio(price_data=price_data)
+        await self.update_portfolio_ratio(price_data=price_data, is_sell_all=True)
 
     def _record_value(self, date: Optional[datetime], current_value: float) -> None:
         # 날짜와 함께 가치 기록

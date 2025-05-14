@@ -54,7 +54,22 @@ class TradingSystem:
             & (pd.to_datetime(df_micro_full["datetime"]) < self.end_date)
         ]
 
-        interval_minutes = 1440 * 30 if only_macro else 1440
+        # interval_minutes를 macro_tick, micro_tick에 따라 동적으로 할당
+        tick_to_minutes = {
+            "month1": 1440 * 30,
+            "week1": 1440 * 7,
+            "day1": 1440,
+            "hour1": 60,
+            "minute30": 30,
+            "minute15": 15,
+            "minute5": 5,
+            "minute1": 1,
+        }
+
+        # only_macro가 True면 macro_tick 기준, 아니면 micro_tick 기준
+        interval_minutes = tick_to_minutes.get(
+            macro_tick if only_macro else micro_tick, 1440
+        )
         self.portfolio_manager = PortfolioManager(
             coin=coin, cash=initial_balance, interval_minutes=interval_minutes
         )

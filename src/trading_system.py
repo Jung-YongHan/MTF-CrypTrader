@@ -234,7 +234,6 @@ class TradingSystem:
         end_time = time()
         print(f"Total time taken for backtest: {end_time - start_time:.2f} seconds")
 
-        print(self.df_macro.iloc[-1])
         await self.portfolio_manager.sell_all(
             price_data=self.df_macro.iloc[-1].to_dict(),
         )

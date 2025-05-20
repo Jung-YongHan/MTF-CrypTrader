@@ -1,5 +1,6 @@
 from typing import Any, Dict
 
+from src.enum.coin_type import CoinType
 from src.portfoilo_manager import PortfolioManager
 
 
@@ -8,7 +9,7 @@ class TradeExecutor:
     async def execute(
         self,
         price_data: Dict[str, Any],
-        coin: str,
+        coin: CoinType,
         micro_report: Dict[str, Any] = None,
     ) -> None:
         if micro_report is None:

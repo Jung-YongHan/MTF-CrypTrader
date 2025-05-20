@@ -3,31 +3,33 @@ from typing import Any, Dict
 
 import pandas as pd
 
+from src.enum.record_type import RecordType
+
 
 class RecordManager:
     def __init__(
-        self, coin: str, regime: str, report_type: str, only_macro: bool = False
+        self, coin: str, market: str, record_type: RecordType, only_macro: bool = False
     ):
         folder_path = "only_macro" if only_macro else "results"
 
         self.folder_path = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__),
-                f"../data/{folder_path}/{regime}/{report_type}",
+                f"../data/{folder_path}/{market}/{record_type}",
             )
         )
         os.makedirs(self.folder_path, exist_ok=True)
 
-        self.file_path = os.path.join(self.folder_path, f"{coin}_{regime}.csv")
+        self.file_path = os.path.join(self.folder_path, f"{coin}_{market}.csv")
 
-        if report_type == "macro":
+        if record_type == RecordType.MACRO:
             self.column_types = {
                 "datetime": "datetime64[ns]",
                 "regime": "object",
                 "confidence": "float64",
                 "rate_limit": "float64",
             }
-        elif report_type == "micro":
+        elif record_type == RecordType.MICRO:
             self.column_types = {
                 "datetime": "datetime64[ns]",
                 "pulse": "object",
@@ -35,15 +37,13 @@ class RecordManager:
                 "order": "object",
                 "amount": "float64",
             }
-        elif report_type == "trade":
+        else:
             self.column_types = {
                 "datetime": "datetime64[ns]",
                 "return": "float64",
                 "mdd": "float64",
                 "sharpe": "float64",
             }
-        else:
-            raise ValueError(f"Unknown report_type: {report_type}")
 
         # 👉 이미 파일이 존재하면 지우고 빈 데이터프레임으로 시작
         if os.path.exists(self.file_path):

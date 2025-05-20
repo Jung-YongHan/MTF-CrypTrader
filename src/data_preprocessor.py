@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import talib
 
+from src.enum.market_category_type import MarketCategoryType
+
 
 class DataPreprocessor:
     """
@@ -43,7 +45,7 @@ class DataPreprocessor:
             self._compute_micro_indicators()
 
     def update_and_get_price_data(
-        self, row: dict, timeframe: str, save_path: str = None
+        self, row: dict, timeframe: MarketCategoryType, save_path: str = None
     ) -> Tuple[Dict, Any]:
         # datetime 파싱
         row["datetime"] = pd.to_datetime(row["datetime"])
@@ -52,7 +54,7 @@ class DataPreprocessor:
         full_df["datetime"] = pd.to_datetime(full_df["datetime"])
 
         # 기간(window) 설정
-        window = 60 if timeframe == "macro" else 20
+        window = 60 if timeframe == MarketCategoryType.MACRO else 20
 
         # row 시점까지의 과거 데이터 확보
         hist_df = full_df[full_df["datetime"] <= row["datetime"]]
@@ -66,13 +68,13 @@ class DataPreprocessor:
         latest_row["datetime"] = latest_row["datetime"].strftime("%Y-%m-%d %H:%M:%S")
         return latest_row, fig  # tmp_df를 latest_row로 변경하여 반환
 
-    def _update(self, row: dict, timeframe: str) -> pd.DataFrame:
+    def _update(self, row: dict, timeframe: MarketCategoryType) -> pd.DataFrame:
         """
         row: dict, 새로운 데이터 한 건
-        timeframe: "macro" 또는 "micro"
+        timeframe: MarketCategoryType
         """
         row_df = pd.DataFrame([row])
-        if timeframe == "macro":
+        if timeframe == MarketCategoryType.MACRO:
             self.df_macro = (
                 pd.concat([self.df_macro, row_df], ignore_index=True)
                 .drop_duplicates(subset="datetime", keep="last")
@@ -81,7 +83,7 @@ class DataPreprocessor:
             )
             self._compute_macro_indicators()
             return self.df_macro
-        elif timeframe == "micro":
+        else:
             self.df_micro = (
                 pd.concat([self.df_micro, row_df], ignore_index=True)
                 .drop_duplicates(subset="datetime", keep="last")
@@ -90,8 +92,6 @@ class DataPreprocessor:
             )
             self._compute_micro_indicators()
             return self.df_micro
-        else:
-            raise ValueError("timeframe은 'macro' 또는 'micro'만 가능합니다.")
 
     def _compute_macro_indicators(self):
         df = self.df_macro
@@ -151,7 +151,7 @@ class DataPreprocessor:
     def _draw_close_chart(
         self,
         df: pd.DataFrame,
-        timeframe: str = "macro",
+        timeframe: MarketCategoryType = MarketCategoryType.MACRO,
         save_path: str = None,
         return_fig: bool = False,
     ):

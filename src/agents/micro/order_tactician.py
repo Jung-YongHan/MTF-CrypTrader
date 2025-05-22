@@ -60,8 +60,8 @@ class OrderTactician(AssistantAgent):
 ### 입력 데이터 구조
 {
     "macro_report": {
-        "regime_report" {
-            "regime": str,
+        "trend_report" {
+            "trend": str,
             "confidence": float,
             "reason": str
         }
@@ -81,8 +81,8 @@ class OrderTactician(AssistantAgent):
     },
 }
 - macro_report
-    - regime: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
-    - confidence: 레짐 분류에 대한 신뢰도 (0.0 ~ 1.0)
+    - trend: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
+    - confidence: 추세 분류에 대한 신뢰도 (0.0 ~ 1.0)
     - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
 - pulse_report
     - pulse: 단기 시장 신호 (상승 돌파 / 하락 돌파 / 돌파 없음)

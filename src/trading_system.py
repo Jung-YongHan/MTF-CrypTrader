@@ -16,7 +16,7 @@ from src.trade_executor import TradeExecutor
 class TradingSystem:
     def __init__(
         self,
-        regime: str,
+        trend: str,
         start_date: str,
         end_date: str,
         coin: str,
@@ -25,7 +25,7 @@ class TradingSystem:
         only_macro: bool = False,
         initial_balance: float = 10_000_000,
     ):
-        self.regime = regime
+        self.trend = trend
         self.start_date = start_date
         self.end_date = end_date
         self.coin = coin
@@ -80,18 +80,18 @@ class TradingSystem:
         self.trade_executor = TradeExecutor()
 
         self.macro_recode_manager = RecordManager(
-            coin=coin, regime=regime, report_type="macro", only_macro=only_macro
+            coin=coin, trend=trend, report_type="macro", only_macro=only_macro
         )
         self.micro_recode_manager = RecordManager(
-            coin=coin, regime=regime, report_type="micro"
+            coin=coin, trend=trend, report_type="micro"
         )
         self.trade_recode_manager = RecordManager(
-            coin=coin, regime=regime, report_type="trade", only_macro=only_macro
+            coin=coin, trend=trend, report_type="trade", only_macro=only_macro
         )
 
     async def run(self) -> None:
         print("Starting backtest...")
-        print(f"Regime: {self.regime}")
+        print(f"trend: {self.trend}")
         print(f"Start date: {self.start_date}")
         print(f"End date: {self.end_date}")
         print(f"Coin: {self.coin}")
@@ -114,7 +114,7 @@ class TradingSystem:
             price_data, fig = self.data_preprocessor.update_and_get_price_data(
                 row=macro_dict,
                 timeframe="macro",
-                save_path=f"data/close_charts/{self.regime}/{index+1}_macro_chart",
+                save_path=f"data/close_charts/{self.trend}/{index+1}_macro_chart",
             )
             # 3. 매크로 시장 분석
             macro_report = await self.macro_analysis_team.analyze(
@@ -124,8 +124,8 @@ class TradingSystem:
             print(f"Macro Report: {macro_report}")
             macro_report_tmp = macro_report.copy()
             macro_report_tmp["datetime"] = macro_tick["datetime"]
-            macro_report_tmp["regime"] = macro_report["regime_report"]["regime"]
-            macro_report_tmp["confidence"] = macro_report["regime_report"]["confidence"]
+            macro_report_tmp["trend"] = macro_report["trend_report"]["trend"]
+            macro_report_tmp["confidence"] = macro_report["trend_report"]["confidence"]
             macro_report_tmp["rate_limit"] = macro_report["limit_report"]["rate_limit"]
             self.macro_recode_manager.record_step(macro_report_tmp)
 
@@ -137,19 +137,19 @@ class TradingSystem:
                 self.portfolio_manager.update_portfolio_ratio(price_data=macro_dict)
 
                 # 4. 매크로 시장의 투자 한도에 따라 매매 결정
-                regime = macro_report["regime_report"]["regime"]
+                trend = macro_report["trend_report"]["trend"]
                 rate_limit = macro_report["limit_report"]["rate_limit"]
                 coin_ratio = self.portfolio_manager.get_portfolio_ratio()[self.coin]
 
                 # 5. 매매 결정
-                if regime == "상승장":
+                if trend == "상승장":
                     if rate_limit > coin_ratio:
                         order = "buy"
                         amount = rate_limit - coin_ratio
                     else:
                         order = "hold"
                         amount = 0.0
-                elif regime == "하락장":
+                elif trend == "하락장":
                     if rate_limit < coin_ratio:
                         order = "sell"
                         amount = coin_ratio - rate_limit
@@ -207,7 +207,7 @@ class TradingSystem:
                     price_data, fig = self.data_preprocessor.update_and_get_price_data(
                         row=micro_dict,
                         timeframe="micro",
-                        save_path=f"data/close_charts/{self.regime}/{index+1}_micro_chart",
+                        save_path=f"data/close_charts/{self.trend}/{index+1}_micro_chart",
                     )
 
                     # 7. 마이크로 시장 분석 및 주문 결정
@@ -276,7 +276,7 @@ class TradingSystem:
 class AsyncTradingSystem(TradingSystem):
     def __init__(
         self,
-        regime: str,
+        trend: str,
         start_date: str,
         end_date: str,
         coin: str,
@@ -285,7 +285,7 @@ class AsyncTradingSystem(TradingSystem):
         only_macro: bool = False,
     ):
         super().__init__(
-            regime=regime,
+            trend=trend,
             start_date=start_date,
             end_date=end_date,
             coin=coin,
@@ -299,7 +299,7 @@ class AsyncTradingSystem(TradingSystem):
 
 
 def create_system(
-    regime: str,
+    trend: str,
     start_date: str,
     end_date: str,
     coin: str,
@@ -314,7 +314,7 @@ def create_system(
     load_dotenv()
 
     return AsyncTradingSystem(
-        regime=regime,
+        trend=trend,
         start_date=start_date,
         end_date=end_date,
         coin=coin,
@@ -329,7 +329,7 @@ if __name__ == "__main__":
 
     warnings.filterwarnings("ignore")
 
-    regime = "bull"
+    trend = "bull"
     coin = "btc"
-    trading_system = TradingSystem(regime, coin)
+    trading_system = TradingSystem(trend, coin)
     asyncio.run(trading_system.run())

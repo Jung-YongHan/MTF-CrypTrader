@@ -6,24 +6,24 @@ import pandas as pd
 
 class RecordManager:
     def __init__(
-        self, coin: str, regime: str, report_type: str, only_macro: bool = False
+        self, coin: str, trend: str, report_type: str, only_macro: bool = False
     ):
         folder_path = "only_macro" if only_macro else "results"
 
         self.folder_path = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__),
-                f"../data/{folder_path}/{regime}/{report_type}",
+                f"../data/{folder_path}/{trend}/{report_type}",
             )
         )
         os.makedirs(self.folder_path, exist_ok=True)
 
-        self.file_path = os.path.join(self.folder_path, f"{coin}_{regime}.csv")
+        self.file_path = os.path.join(self.folder_path, f"{coin}_{trend}.csv")
 
         if report_type == "macro":
             self.column_types = {
                 "datetime": "datetime64[ns]",
-                "regime": "object",
+                "trend": "object",
                 "confidence": "float64",
                 "rate_limit": "float64",
             }

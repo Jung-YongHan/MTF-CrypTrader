@@ -1,20 +1,18 @@
 from typing import Any, Dict
 
 from src.agents.macro.investment_rate_adjuster import InvestmentRateAdjuster
-from src.agents.macro.regime_analyzer import RegimeAnalyzer
+from src.agents.macro.trend_analyzer import TrendAnalyzer
 
 
 class MacroAnalysisTeam:
     def __init__(self):
-        self.regime_analyzer = RegimeAnalyzer()
+        self.trend_analyzer = TrendAnalyzer()
         self.investment_rate_adjuster = InvestmentRateAdjuster()
 
     async def analyze(self, price_data: Dict[str, Any], fig: Any) -> str:
-        regime_report = await self.regime_analyzer.analyze(
-            price_data=price_data, fig=fig
-        )
+        trend_report = await self.trend_analyzer.analyze(price_data=price_data, fig=fig)
 
-        regime_report = await self.investment_rate_adjuster.adjust_rate_limit(
-            regime_report, price_data
+        trend_report = await self.investment_rate_adjuster.adjust_rate_limit(
+            trend_report, price_data
         )
-        return regime_report
+        return trend_report

@@ -11,13 +11,23 @@ from src.trading_system import create_system
 # total: '2024-11-10 09:00:00', '2025-02-27 09:00:00'
 
 app = create_system(
-    regime="total",
-    start_date="2023-10-01 09:00:00",
+    trend="bear",
+    start_date="2024-04-01 09:00:00",
     end_date="2024-10-01 09:00:00",
     coin="btc",
     macro_tick="month1",
     micro_tick="day1",
     only_macro=False,
 )
+
+# app = create_system(
+#     trend="bear",
+#     start_date="2024-04-01 09:00:00",
+#     end_date="2024-10-01 09:00:00",
+#     coin="btc",
+#     macro_tick="month1",
+#     micro_tick="day1",
+#     only_macro=False,
+# )
 if __name__ == "__main__":
     app.run()

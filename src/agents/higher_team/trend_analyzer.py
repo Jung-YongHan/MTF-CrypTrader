@@ -7,14 +7,14 @@ from autogen_core import CancellationToken
 from matplotlib import pyplot as plt
 from pydantic import BaseModel, Field, field_validator
 
-from src.config.agent_config import REGIME_ANALYZER_SYSTEM_MESSAGE
-from src.enum.regime_type import RegimeType
+from src.config.agent_config import TREND_ANALYZER_SYSTEM_MESSAGE
+from src.enum.trend_type import TrendType
 from src.utils.image_utils import get_agentic_image
 from src.utils.model_utils import get_model_client
 
 
-class RegimeReport(BaseModel):
-    regime: RegimeType
+class TrendReport(BaseModel):
+    trend: TrendType
     confidence: float = Field(..., ge=0.0, le=1.0)
     reason: Optional[str] = None
 
@@ -26,21 +26,21 @@ class RegimeReport(BaseModel):
         return v
 
 
-class RegimeAnalyzerResponse(BaseModel):
+class TrendAnalyzerResponse(BaseModel):
     thoughts: str
-    response: RegimeReport
+    response: TrendReport
 
 
-class RegimeAnalyzer(AssistantAgent):
+class TrendAnalyzer(AssistantAgent):
     def __init__(self):
         super().__init__(
-            name="regime_analyzer",
-            model_client=get_model_client(getenv("REGIME_ANALYZER_MODEL")),
-            output_content_type=RegimeAnalyzerResponse,
-            system_message=REGIME_ANALYZER_SYSTEM_MESSAGE,
+            name="trend_analyzer",
+            model_client=get_model_client(getenv("TREND_ANALYZER_MODEL")),
+            output_content_type=TrendAnalyzerResponse,
+            system_message=TREND_ANALYZER_SYSTEM_MESSAGE,
         )
 
-    async def analyze(self, price_data: Dict[str, Any], fig: Any) -> RegimeReport:
+    async def analyze(self, price_data: Dict[str, Any], fig: Any) -> TrendReport:
         image = get_agentic_image(fig)
         plt.close(fig)
 
@@ -50,13 +50,13 @@ class RegimeAnalyzer(AssistantAgent):
         )
 
         response = await self.run(task=[message])
-        content: RegimeAnalyzerResponse = response.messages[-1].content
+        content: TrendAnalyzerResponse = response.messages[-1].content
 
-        regime_report = content.response
-        regime_report.reason = content.thoughts
+        trend_report = content.response
+        trend_report.reason = content.thoughts
 
         await self.close()
-        return regime_report
+        return trend_report
 
     async def close(self):
         await self.on_reset(cancellation_token=CancellationToken())
@@ -69,4 +69,4 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    regime_analyzer = RegimeAnalyzer()
+    trend_analyzer = TrendAnalyzer()

@@ -1,2 +1,2 @@
-# Macro-Micro-Trader
-LLM Multi-Agent Based Cryptocurrency Investment System Considering Both Macro and Micro Markets
+# MTF-CrypTrader
+LLM Multi-Agent Based Cryptocurrency Investment System Considering Multi-Timeframe Price Data

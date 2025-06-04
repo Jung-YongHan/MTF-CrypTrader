@@ -1,10 +1,9 @@
 from enum import Enum
 
 
-class RecordType(str, Enum):
+class TimeframeCategoryType(str, Enum):
     HIGHER = "higher"
     LOWER = "lower"
-    TRADE = "trade"
 
     def __str__(self):
         return self.value

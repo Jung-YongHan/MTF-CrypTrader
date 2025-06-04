@@ -2,19 +2,19 @@ from typing import Any, Dict
 
 from pydantic import BaseModel
 
-from src.agents.micro_team.micro_investment_rate_adjuster import (
+from src.agents.lower_team.lower_investment_rate_adjuster import (
+    LimitReport,
     MicroInvestmentRateAdjuster,
-    MicroLimitReportResponse,
 )
-from src.agents.micro_team.pulse_detector import PulseDetector, PulseReportResponse
+from src.agents.lower_team.pulse_detector import PulseDetector, PulseReport
 
 
-class MicroReport(BaseModel):
-    pulse_report: PulseReportResponse
-    micro_limit_report: MicroLimitReportResponse
+class LowerReport(BaseModel):
+    pulse_report: PulseReport
+    micro_limit_report: LimitReport
 
 
-class MicroAnalysisTeam:
+class LowerAnalysisTeam:
     def __init__(self):
         self.pulse_detector = PulseDetector()
         self.micro_investment_rate_adjuster = MicroInvestmentRateAdjuster()
@@ -23,12 +23,12 @@ class MicroAnalysisTeam:
         self,
         price_data: Dict[str, Any],
         fig: Any,
-    ) -> MicroReport:
+    ) -> LowerReport:
         """
         Analyze the market pulse and adjust the investment rate limit.
         :param price_data: Price data for analysis
         :param fig: Chart figure for analysis
-        :param macro_report: Macro report for analysis
+        :param macro_report: Higher report for analysis
         :return: JSON string of the micro report
         """
         # Analyze the market pulse
@@ -42,7 +42,7 @@ class MicroAnalysisTeam:
         )
 
         # Create the micro report
-        micro_report = MicroReport(
+        micro_report = LowerReport(
             pulse_report=pulse_report,
             micro_limit_report=micro_limit_report,
         )

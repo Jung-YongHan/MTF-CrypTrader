@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import talib
 
-from src.enum.market_category_type import MarketCategoryType
+from src.enum.timeframe_category_type import TimeframeCategoryType
 
 
 class DataPreprocessor:
     """
-    - 일봉(매크로)과 분봉(마이크로) 데이터를 구분하여 관리 및 지표 계산
+    - 일봉(상위)과 분봉(하위) 데이터를 구분하여 관리 및 지표 계산
     - update()로 새로운 데이터(딕셔너리) 한 건씩 받아
       1) 내부 DataFrame(일봉/분봉)에 append
       2) 각 시장에 맞는 주요 지표 재계산
@@ -45,7 +45,7 @@ class DataPreprocessor:
             self._compute_micro_indicators()
 
     def update_and_get_price_data(
-        self, row: dict, timeframe: MarketCategoryType, save_path: str = None
+        self, row: dict, timeframe: TimeframeCategoryType, save_path: str = None
     ) -> Tuple[Dict, Any]:
         # datetime 파싱
         row["datetime"] = pd.to_datetime(row["datetime"])
@@ -54,7 +54,7 @@ class DataPreprocessor:
         full_df["datetime"] = pd.to_datetime(full_df["datetime"])
 
         # 기간(window) 설정
-        window = 60 if timeframe == MarketCategoryType.MACRO else 20
+        window = 40
 
         # row 시점까지의 과거 데이터 확보
         hist_df = full_df[full_df["datetime"] <= row["datetime"]]
@@ -68,13 +68,13 @@ class DataPreprocessor:
         latest_row["datetime"] = latest_row["datetime"].strftime("%Y-%m-%d %H:%M:%S")
         return latest_row, fig  # tmp_df를 latest_row로 변경하여 반환
 
-    def _update(self, row: dict, timeframe: MarketCategoryType) -> pd.DataFrame:
+    def _update(self, row: dict, timeframe: TimeframeCategoryType) -> pd.DataFrame:
         """
         row: dict, 새로운 데이터 한 건
         timeframe: MarketCategoryType
         """
         row_df = pd.DataFrame([row])
-        if timeframe == MarketCategoryType.MACRO:
+        if timeframe == TimeframeCategoryType.HIGHER:
             self.df_macro = (
                 pd.concat([self.df_macro, row_df], ignore_index=True)
                 .drop_duplicates(subset="datetime", keep="last")
@@ -99,7 +99,7 @@ class DataPreprocessor:
             df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
         )
 
-        # 거시적(매크로) 관점의 주요 지표 계산
+        # 거시적(상위) 관점의 주요 지표 계산
         # 경기순환, 추세, 변동성, 위험 등 장기적 흐름 파악에 초점
         df["sma200"] = talib.SMA(close, timeperiod=200)  # 장기 이동평균
         df["ema100"] = talib.EMA(close, timeperiod=100)  # 장기 EMA
@@ -125,7 +125,7 @@ class DataPreprocessor:
             df[c].astype(float) for c in ("close", "high", "low", "volume", "open")
         )
 
-        # 미시적(마이크로) 관점의 주요 지표 계산
+        # 미시적(하위) 관점의 주요 지표 계산
         # 초단기 모멘텀, 변동성, 시장 미세구조 등 빠른 신호 포착에 초점
         df["sma3"] = talib.SMA(close, timeperiod=3)  # 초단기 이동평균
         df["ema5"] = talib.EMA(close, timeperiod=5)  # 초단기 EMA
@@ -151,7 +151,7 @@ class DataPreprocessor:
     def _draw_close_chart(
         self,
         df: pd.DataFrame,
-        timeframe: MarketCategoryType = MarketCategoryType.MACRO,
+        timeframe: TimeframeCategoryType = TimeframeCategoryType.HIGHER,
         save_path: str = None,
         return_fig: bool = False,
     ):

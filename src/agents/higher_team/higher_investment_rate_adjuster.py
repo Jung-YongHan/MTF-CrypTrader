@@ -1,21 +1,21 @@
 import json
 from os import getenv
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.messages import TextMessage
 from autogen_core import CancellationToken
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from src.agents.micro_team.pulse_detector import PulseReport
-from src.config.agent_config import MICRO_INVESTMENT_RATE_ADJUSTER_SYSTEM_MESSAGE
+from src.agents.higher_team.trend_analyzer import TrendReport
+from src.config.agent_config import MACRO_INVESTMENT_RATE_ADJUSTER_SYSTEM_MESSAGE
 from src.portfoilo_manager import PortfolioManager
 from src.utils.model_utils import get_model_client
 
 
 class LimitReport(BaseModel):
-    rate_limit: float
-    reason: str
+    rate_limit: float = Field(..., ge=0.0, le=1.0)
+    reason: Optional[str] = None
 
     @field_validator("rate_limit")
     @classmethod
@@ -28,34 +28,34 @@ class LimitReport(BaseModel):
         return v
 
 
-class MicroInvestmentRateAdjusterResponse(BaseModel):
+class MacroInvestmentRateAdjusterResponse(BaseModel):
     thoughts: str
     response: LimitReport
 
 
-class MicroInvestmentRateAdjuster(AssistantAgent):
+class MacroInvestmentRateAdjuster(AssistantAgent):
     def __init__(self):
         super().__init__(
             name="investment_rate_adjuster",
             model_client=get_model_client(
-                getenv("MICRO_INVESTMENT_RATE_ADJUSTER_MODEL")
+                getenv("MACRO_INVESTMENT_RATE_ADJUSTER_MODEL")
             ),
-            output_content_type=MicroInvestmentRateAdjusterResponse,
-            system_message=MICRO_INVESTMENT_RATE_ADJUSTER_SYSTEM_MESSAGE,
+            output_content_type=MacroInvestmentRateAdjusterResponse,
+            system_message=MACRO_INVESTMENT_RATE_ADJUSTER_SYSTEM_MESSAGE,
         )
 
     async def adjust_rate_limit(
         self,
-        pulse_report: PulseReport,
+        trend_report: TrendReport,
         price_data: Dict[str, Any],
     ) -> LimitReport:
-        report = {
-            "pulse_report": pulse_report,
+        prompt = {
+            "trend_report": trend_report.model_dump_json(),
             "price_data": price_data,
             "portfolio_ratio": PortfolioManager.get_instance().get_portfolio_ratio(),
         }
         base_msg = TextMessage(
-            content=json.dumps(report, indent=4),
+            content=json.dumps(prompt, indent=4),
             source="data_preprocessor",
         )
 
@@ -63,7 +63,7 @@ class MicroInvestmentRateAdjuster(AssistantAgent):
         while True:  # 최대 5회 반복
             try:
                 response = await self.run(task=message)
-                content: MicroInvestmentRateAdjusterResponse = response.messages[
+                content: MacroInvestmentRateAdjusterResponse = response.messages[
                     -1
                 ].content
 
@@ -74,7 +74,7 @@ class MicroInvestmentRateAdjuster(AssistantAgent):
                 limit_report.reason = content.thoughts
 
                 await self.close()
-                return limit_report.model_dump_json()
+                return limit_report
             except ValidationError as e:  # ← ValidationError 잡기
                 feedback = TextMessage(
                     content=(
@@ -91,3 +91,11 @@ class MicroInvestmentRateAdjuster(AssistantAgent):
         await self.on_reset(cancellation_token=CancellationToken())
         # await self._client.close()
         # await super().close()
+
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    rate_adjuster = MacroInvestmentRateAdjuster()

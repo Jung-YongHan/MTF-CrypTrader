@@ -3,33 +3,39 @@ from typing import Any, Dict
 
 import pandas as pd
 
+from src.enum.market_type import MarketType
 from src.enum.record_type import RecordType
+from src.enum.trend_type import TrendType
 
 
 class RecordManager:
     def __init__(
-        self, coin: str, market: str, record_type: RecordType, only_macro: bool = False
+        self,
+        market: MarketType,
+        trend: TrendType,
+        record_type: RecordType,
+        only_macro: bool = False,
     ):
         folder_path = "only_macro" if only_macro else "results"
 
         self.folder_path = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__),
-                f"../data/{folder_path}/{market}/{record_type}",
+                f"../data/{folder_path}/{trend}/{record_type}",
             )
         )
         os.makedirs(self.folder_path, exist_ok=True)
 
-        self.file_path = os.path.join(self.folder_path, f"{coin}_{market}.csv")
+        self.file_path = os.path.join(self.folder_path, f"{market}_{trend}.csv")
 
-        if record_type == RecordType.MACRO:
+        if record_type == RecordType.HIGHER:
             self.column_types = {
                 "datetime": "datetime64[ns]",
-                "regime": "object",
+                "trend": "object",
                 "confidence": "float64",
                 "rate_limit": "float64",
             }
-        elif record_type == RecordType.MICRO:
+        elif record_type == RecordType.LOWER:
             self.column_types = {
                 "datetime": "datetime64[ns]",
                 "pulse": "object",

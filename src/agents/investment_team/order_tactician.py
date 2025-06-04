@@ -55,13 +55,13 @@ class OrderTactician(AssistantAgent):
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 주문 전술가입니다.
-주어진 매크로 리포트(macro_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
+주어진 상위 리포트(higher_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
 
 ### 입력 데이터 구조
 {
-    "macro_report": {
-        "regime_report" {
-            "regime": str,
+    "higher_report": {
+        "trend_report" {
+            "trend": str,
             "confidence": float,
             "reason": str
         }
@@ -80,9 +80,9 @@ class OrderTactician(AssistantAgent):
         "btc": float
     },
 }
-- macro_report
-    - regime: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
-    - confidence: 레짐 분류에 대한 신뢰도 (0.0 ~ 1.0)
+- higher_report
+    - trend: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
+    - confidence: 추세 분류에 대한 신뢰도 (0.0 ~ 1.0)
     - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
 - pulse_report
     - pulse: 단기 시장 신호 (상승 돌파 / 하락 돌파 / 돌파 없음)
@@ -198,7 +198,7 @@ class OrderTactician(AssistantAgent):
                 if order == "sell":
                     if round(amount, 4) > round(coin_ratio, 4):
                         raise ValueError(
-                            "Sell amount {:.4f} exceeds coin balance {:.4f}.".format(
+                            "Sell amount {:.4f} exceeds market balance {:.4f}.".format(
                                 amount, coin_ratio
                             )
                         )
@@ -221,7 +221,7 @@ class OrderTactician(AssistantAgent):
                 feedback = TextMessage(
                     content=(
                         f"⛔  Order rule validation failed: {e}\n"
-                        "- sell 시에는 coin 비율 이하의 amount만 허용됩니다.\n"
+                        "- sell 시에는 market 비율 이하의 amount만 허용됩니다.\n"
                         "- buy 시에는 cash 비율 이하의 amount만 허용됩니다.\n"
                     ),
                     source="validator",

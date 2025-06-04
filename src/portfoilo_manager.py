@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from src.enum.coin_type import CoinType
+from src.enum.market_type import MarketType
 from src.enum.order_type import OrderType
 
 
@@ -24,20 +24,20 @@ class PortfolioManager:
 
     def __init__(
         self,
-        coin: str,
+        market: MarketType,
         cash: float,
         risk_free_rate: float = 0.0,
         interval_minutes: int = 15,
     ):
-        self.coin = coin
+        self.market = market
         self.fee = 0.0008
         self.portfolio = {
             "cash": cash,
-            coin: 0,
+            market: 0,
         }
         self.portfolio_ratio = {
             "cash": 1,
-            coin: 0,
+            market: 0,
         }
 
         # 성과 지표 기록
@@ -78,12 +78,12 @@ class PortfolioManager:
             price = price_data.get("open")
 
         cash_amount = self.portfolio.get("cash")  # 현금 보유량
-        coin_amount = self.portfolio.get(self.coin)  # 코인 보유량
-        total_value = cash_amount + coin_amount * price
+        market_amount = self.portfolio.get(self.market)  # 코인 보유량
+        total_value = cash_amount + market_amount * price
 
         # Update portfolio ratio
         self.portfolio_ratio["cash"] = cash_amount / total_value
-        self.portfolio_ratio[self.coin] = coin_amount * price / total_value
+        self.portfolio_ratio[self.market] = market_amount * price / total_value
 
         # 가치 기록 및 MDD 업데이트
         self._record_value(date, total_value)
@@ -91,7 +91,7 @@ class PortfolioManager:
     async def update_portfolio_by_trade(
         self,
         price_data: Dict[str, Any],
-        coin: CoinType,
+        market: MarketType,
         amount: float,
         order_type: OrderType,
     ) -> None:
@@ -101,19 +101,19 @@ class PortfolioManager:
 
         Args:
             price_data (Dict[str, Any]): 가격 데이터
-            coin (CoinType): 코인 종류
+            market (MarketType): 코인 종류
             amount (float): 주문할 코인의 총 자산 대비 비율
             order_type (OrderType): "buy", "sell" or "hold"
 
         Raises:
             ValueError: _description_
         """
-        if coin not in self.portfolio:
-            raise ValueError(f"Coin {coin} not in portfolio.")
+        if market not in self.portfolio:
+            raise ValueError(f"Coin {market} not in portfolio.")
 
         price = price_data["open"]  # 시가
 
-        total_value = self.portfolio["cash"] + self.portfolio[coin] * price  # 총 자산
+        total_value = self.portfolio["cash"] + self.portfolio[market] * price  # 총 자산
 
         if order_type == OrderType.BUY:
             # 수수료가 반영된 매수할 원화 금액
@@ -121,7 +121,7 @@ class PortfolioManager:
             # 구매할 코인 수량
             pay_amount = total_value_after_fee / price
             # 최종 코인 수량
-            self.portfolio[self.coin] += pay_amount
+            self.portfolio[self.market] += pay_amount
             # 최종 현금 수량, 수수료가 반영되지 않은 현금에서 차감
             self.portfolio["cash"] -= total_value * amount
 
@@ -131,7 +131,7 @@ class PortfolioManager:
             # 판매할 코인 수량
             pay_amount = sell_value / price
             # 최종 코인 수량
-            self.portfolio[self.coin] -= pay_amount
+            self.portfolio[self.market] -= pay_amount
             # 최종 현금 수량, 수수료가 반영된 현금에서 차감
             self.portfolio["cash"] += sell_value * (1 - self.fee)
 
@@ -151,13 +151,13 @@ class PortfolioManager:
         Raises:
             ValueError: _description_
         """
-        if self.coin not in self.portfolio:
-            raise ValueError(f"Coin {self.coin} not in portfolio.")
+        if self.market not in self.portfolio:
+            raise ValueError(f"Coin {self.market} not in portfolio.")
 
         price = price_data["close"]
-        coin_amount = self.portfolio[self.coin]
-        self.portfolio["cash"] += (coin_amount * price) * (1 - self.fee)
-        self.portfolio[self.coin] = 0
+        market_amount = self.portfolio[self.market]
+        self.portfolio["cash"] += (market_amount * price) * (1 - self.fee)
+        self.portfolio[self.market] = 0
         await self.update_portfolio_ratio(price_data=price_data, is_sell_all=True)
 
     def _record_value(self, date: Optional[datetime], current_value: float) -> None:

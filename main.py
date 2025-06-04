@@ -1,6 +1,6 @@
-from src.enum.coin_type import CoinType
 from src.enum.market_type import MarketType
 from src.enum.tick_type import TickType
+from src.enum.trend_type import TrendType
 from src.trading_system import create_system
 
 # month1, day1
@@ -14,12 +14,12 @@ from src.trading_system import create_system
 # total: '2024-11-10 09:00:00', '2025-02-27 09:00:00'
 
 app = create_system(
-    market=MarketType.SIDEWAYS,
-    start_date="2025-03-01 09:00:00",
-    end_date="2025-04-30 09:00:00",
-    coin=CoinType.BTC,
-    macro_tick=TickType.MONTH1,
-    micro_tick=TickType.DAY1,
+    trend=TrendType.BULL,
+    start_date="2023-10-01 09:00:00",
+    end_date="2024-04-01 09:00:00",
+    market=MarketType.BTC,
+    macro_tick=TickType.DAY1,
+    micro_tick=TickType.HOUR1,
     only_macro=False,
 )
 if __name__ == "__main__":

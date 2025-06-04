@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from src.enum.coin_type import CoinType
+from src.enum.market_type import MarketType
 from src.portfoilo_manager import PortfolioManager
 
 
@@ -9,7 +9,7 @@ class TradeExecutor:
     async def execute(
         self,
         price_data: Dict[str, Any],
-        coin: CoinType,
+        market: MarketType,
         micro_report: Dict[str, Any] = None,
     ) -> None:
         if micro_report is None:
@@ -22,11 +22,11 @@ class TradeExecutor:
 
         await PortfolioManager.get_instance().update_portfolio_by_trade(
             price_data=price_data,
-            coin=coin,
+            market=market,
             amount=amount,
             order_type=order_type,
         )
 
         print(
-            f"Trade executed: {order_type} {amount} of {coin} at price {price_data.get("open")}."
+            f"Trade executed: {order_type} {amount} of {market} at price {price_data.get("open")}."
         )

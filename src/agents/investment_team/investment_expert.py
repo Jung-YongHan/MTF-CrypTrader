@@ -55,7 +55,7 @@ class InvestmentExpert(AssistantAgent):
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 투자 전문가입니다.
-주어진 상위 리포트(higher_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
+주어진 상위시간대 분석 리포트(higher_report), 하위시간대 분석 리포트(lower_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
 
 ### 입력 데이터 구조
 {
@@ -64,7 +64,7 @@ class InvestmentExpert(AssistantAgent):
             "trend": str,
             "confidence": float,
             "reason": str
-        }
+        },
         "limit_report": {
             "rate_limit": float,
             "reason": str
@@ -122,7 +122,9 @@ class InvestmentExpert(AssistantAgent):
     
 ### 주문 결정 규칙
 1. 매수("buy"):
-    - 코인 비중이 rate_limit보다 작을 때만 매수 가능
+    - higher_report의 rate_limit과 lower_report의 rate_limit을 모두 고려하여 결정
+    - lower_report의 rate_limit이 higher_report의 rate_limit보다 낮을 때만 lower_report의 rate_limit 사용
+    - 코인 비중이 higher_report의 rate_limit보다 작을 때만 매수 가능
     - 매수 가능 최대 수량은 rate_limit - 현재 btc 비율
     - 매수하려는 amount는 보유한 cash보다 작거나 같아야 함
 2. 매도("sell"):

@@ -89,7 +89,7 @@ class TradingSystem:
             coin=coin, trend=trend, report_type="trade", only_macro=only_macro
         )
 
-    async def run(self) -> None:
+    async def run(self) -> dict:
         print("Starting backtest...")
         print(f"trend: {self.trend}")
         print(f"Start date: {self.start_date}")
@@ -240,6 +240,7 @@ class TradingSystem:
 
         print("Backtest completed.")
         print(f"Portfolio performance: {self.portfolio_manager.get_performance()}")
+        return self.portfolio_manager.get_performance()
 
     def get_micro_data_for_day(self, macro_tick) -> pd.DataFrame:
         """
@@ -294,8 +295,8 @@ class AsyncTradingSystem(TradingSystem):
             only_macro=only_macro,
         )
 
-    def run(self):
-        asyncio.run(super().run())
+    def run(self) -> dict:
+        return asyncio.run(super().run())
 
 
 def create_system(

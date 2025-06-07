@@ -1,33 +1,25 @@
+import json
+
 from src.trading_system import create_system
 
-# month1, day1
-# bull: '2023-10-01 09:00:00', '2024-04-01 09:00:00'
-# bear: '2024-04-01 09:00:00', '2024-10-01 09:00:00'
-# total: '2023-10-01 09:00:00', '2024-10-01 09:00:00'
 
-# day1, hour1
-# bull: '2024-11-10 09:00:00', '2024-12-17 09:00:00'
-# bear: '2025-01-21 09:00:00', '2025-02-27 09:00:00'
-# total: '2024-11-10 09:00:00', '2025-02-27 09:00:00'
+def run_backtest(config: dict) -> dict:
+    app = create_system(**config)
+    return app.run()
 
-app = create_system(
-    trend="bear",
-    start_date="2024-04-01 09:00:00",
-    end_date="2024-10-01 09:00:00",
-    coin="btc",
-    macro_tick="month1",
-    micro_tick="day1",
-    only_macro=False,
-)
 
-# app = create_system(
-#     trend="bear",
-#     start_date="2024-04-01 09:00:00",
-#     end_date="2024-10-01 09:00:00",
-#     coin="btc",
-#     macro_tick="month1",
-#     micro_tick="day1",
-#     only_macro=False,
-# )
+def main():
+    with open("config.json", "r", encoding="utf-8") as f:
+        test_configs = json.load(f)
+
+    results = []
+    for cfg in test_configs:
+        perf = run_backtest(cfg)
+        results.append({**cfg, "performance": perf})
+
+    print("==== All Results ====")
+    print(json.dumps(results, indent=2, ensure_ascii=False))
+
+
 if __name__ == "__main__":
-    app.run()
+    main()

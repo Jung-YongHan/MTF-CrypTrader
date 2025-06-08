@@ -22,7 +22,7 @@ class TradingSystem:
         coin: str,
         macro_tick: str,
         micro_tick: str,
-        only_macro: bool = False,
+        system_mode: str = "full",  # macro, micro, full
         initial_balance: float = 10_000_000,
     ):
         self.trend = trend
@@ -32,7 +32,7 @@ class TradingSystem:
         self.initial_balance = initial_balance
         self.macro_tick = macro_tick
         self.micro_tick = micro_tick
-        self.only_macro = only_macro
+        self.system_mode = system_mode
 
         def load_data(tick):
             """
@@ -66,9 +66,9 @@ class TradingSystem:
             "minute1": 1,
         }
 
-        # only_macro가 True면 macro_tick 기준, 아니면 micro_tick 기준
+        # system_mode가 True면 macro_tick 기준, 아니면 micro_tick 기준
         interval_minutes = tick_to_minutes.get(
-            macro_tick if only_macro else micro_tick, 1440
+            macro_tick if system_mode == "macro" else micro_tick, 1440
         )
         self.portfolio_manager = PortfolioManager(
             coin=coin, cash=initial_balance, interval_minutes=interval_minutes
@@ -80,13 +80,13 @@ class TradingSystem:
         self.trade_executor = TradeExecutor()
 
         self.macro_recode_manager = RecordManager(
-            coin=coin, trend=trend, report_type="macro", only_macro=only_macro
+            coin=coin, trend=trend, report_type="macro", system_mode=system_mode
         )
         self.micro_recode_manager = RecordManager(
             coin=coin, trend=trend, report_type="micro"
         )
         self.trade_recode_manager = RecordManager(
-            coin=coin, trend=trend, report_type="trade", only_macro=only_macro
+            coin=coin, trend=trend, report_type="trade", system_mode=system_mode
         )
 
     async def run(self) -> dict:
@@ -97,7 +97,7 @@ class TradingSystem:
         print(f"Coin: {self.coin}")
         print(f"Macro tick: {self.macro_tick}")
         print(f"Micro tick: {self.micro_tick}")
-        print(f"Only macro: {self.only_macro}")
+        print(f"System Mode: {self.system_mode}")
         print(f"Initial balance: {self.initial_balance}")
 
         # 1. 매크로 단위 데이터를 순회
@@ -133,42 +133,43 @@ class TradingSystem:
                 print("No rate_limit, skipping micro analysis.")
                 continue
 
-            if self.only_macro:
+            if self.system_mode == "macro":
+                # # 4. 매크로 시장의 투자 한도에 따라 매매 결정
+                # trend = macro_report["trend_report"]["trend"]
+                # rate_limit = macro_report["limit_report"]["rate_limit"]
+                # coin_ratio = self.portfolio_manager.get_portfolio_ratio()[self.coin]
+
+                # # 5. 매매 결정
+                # if trend == "상승장":
+                #     if rate_limit > coin_ratio:
+                #         order = "buy"
+                #         amount = rate_limit - coin_ratio
+                #     else:
+                #         order = "hold"
+                #         amount = 0.0
+                # elif trend == "하락장":
+                #     if rate_limit < coin_ratio:
+                #         order = "sell"
+                #         amount = coin_ratio - rate_limit
+                #     else:
+                #         order = "hold"
+                #         amount = 0.0
+                # else:
+                #     order = "hold"
+                #     amount = 0.0
+
                 self.portfolio_manager.update_portfolio_ratio(price_data=macro_dict)
 
-                # 4. 매크로 시장의 투자 한도에 따라 매매 결정
-                trend = macro_report["trend_report"]["trend"]
-                rate_limit = macro_report["limit_report"]["rate_limit"]
-                coin_ratio = self.portfolio_manager.get_portfolio_ratio()[self.coin]
+                order_report = await self.micro_analysis_team.order_tactician.decide(
+                    macro_report=macro_report, pulse_report=None
+                )
 
-                # 5. 매매 결정
-                if trend == "상승장":
-                    if rate_limit > coin_ratio:
-                        order = "buy"
-                        amount = rate_limit - coin_ratio
-                    else:
-                        order = "hold"
-                        amount = 0.0
-                elif trend == "하락장":
-                    if rate_limit < coin_ratio:
-                        order = "sell"
-                        amount = coin_ratio - rate_limit
-                    else:
-                        order = "hold"
-                        amount = 0.0
-                else:
-                    order = "hold"
-                    amount = 0.0
+                print(f"Order Report: {order_report}")
 
                 await self.trade_executor.execute(
                     price_data=macro_dict,
                     coin=self.coin,
-                    micro_report={
-                        "order_report": {
-                            "order": order,
-                            "amount": amount,
-                        }
-                    },
+                    micro_report={"order_report": order_report},
                 )
 
                 trade_report = {
@@ -210,12 +211,25 @@ class TradingSystem:
                         save_path=f"data/close_charts/{self.trend}/{index+1}_micro_chart",
                     )
 
-                    # 7. 마이크로 시장 분석 및 주문 결정
-                    micro_report = await self.micro_analysis_team.analyze(
-                        price_data=price_data,
-                        fig=fig,
-                        macro_report=macro_report,
-                    )
+                    if self.system_mode == "micro":
+                        # 7. 마이크로 시장 분석 및 주문 결정
+                        micro_report = (
+                            await self.micro_analysis_team.pulse_detector.detect(
+                                price_data=price_data, fig=fig
+                            )
+                        )
+                        micro_report = (
+                            await self.micro_analysis_team.order_tactician.decide(
+                                macro_report=None, pulse_report=micro_report
+                            )
+                        )
+                    else:
+                        # 7. 마이크로 시장 분석 및 주문 결정
+                        micro_report = await self.micro_analysis_team.analyze(
+                            price_data=price_data,
+                            fig=fig,
+                            macro_report=macro_report,
+                        )
 
                     print(f"Micro Report: {micro_report}")
                     micro_report_tmp = {
@@ -283,7 +297,7 @@ class AsyncTradingSystem(TradingSystem):
         coin: str,
         macro_tick: str,
         micro_tick: str,
-        only_macro: bool = False,
+        system_mode: str = "full",  # macro, micro, full
     ):
         super().__init__(
             trend=trend,
@@ -292,7 +306,7 @@ class AsyncTradingSystem(TradingSystem):
             coin=coin,
             macro_tick=macro_tick,
             micro_tick=micro_tick,
-            only_macro=only_macro,
+            system_mode=system_mode,
         )
 
     def run(self) -> dict:
@@ -306,7 +320,7 @@ def create_system(
     coin: str,
     macro_tick: str,
     micro_tick: str,
-    only_macro: bool = False,
+    system_mode: str = "full",  # macro, micro, full
 ):
     import warnings
 
@@ -321,16 +335,5 @@ def create_system(
         coin=coin,
         macro_tick=macro_tick,
         micro_tick=micro_tick,
-        only_macro=only_macro,
+        system_mode=system_mode,
     )
-
-
-if __name__ == "__main__":
-    import warnings
-
-    warnings.filterwarnings("ignore")
-
-    trend = "bull"
-    coin = "btc"
-    trading_system = TradingSystem(trend, coin)
-    asyncio.run(trading_system.run())

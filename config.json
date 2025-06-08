@@ -4,53 +4,107 @@
     "start_date": "2023-10-01 09:00:00",
     "end_date":   "2024-03-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
   },
   {
     "trend": "bull",
     "start_date": "2023-10-01 09:00:00",
     "end_date":   "2024-03-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
   },
   {
     "trend": "bull",
     "start_date": "2023-10-01 09:00:00",
     "end_date":   "2024-03-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
   },
   {
     "trend": "bear",
     "start_date": "2024-06-01 09:00:00",
     "end_date":   "2024-11-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
   },
   {
     "trend": "bear",
     "start_date": "2024-06-01 09:00:00",
     "end_date":   "2024-11-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
   },
   {
     "trend": "bear",
     "start_date": "2024-06-01 09:00:00",
     "end_date":   "2024-11-01 09:00:00",
     "coin": "eth",
-    "macro_tick": "day1",
+    "macro_tick": "month1",
     "micro_tick": "day1",
-    "only_macro": true
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bull",
+    "start_date": "2024-11-01 09:00:00",
+    "end_date":   "2025-02-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bull",
+    "start_date": "2024-11-01 09:00:00",
+    "end_date":   "2025-02-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bull",
+    "start_date": "2024-11-01 09:00:00",
+    "end_date":   "2025-02-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bear",
+    "start_date": "2025-02-01 09:00:00",
+    "end_date":   "2025-05-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bear",
+    "start_date": "2025-02-01 09:00:00",
+    "end_date":   "2025-05-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
+  },
+  {
+    "trend": "bear",
+    "start_date": "2025-02-01 09:00:00",
+    "end_date":   "2025-05-01 09:00:00",
+    "coin": "xrp",
+    "macro_tick": "month1",
+    "micro_tick": "day1",
+    "system_mode": "macro"
   }
 ]

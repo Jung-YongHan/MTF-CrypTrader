@@ -1,6 +1,6 @@
 import json
 from os import getenv
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Union
 
 import pydantic
 from autogen_agentchat.agents import AssistantAgent
@@ -55,100 +55,111 @@ class OrderTactician(AssistantAgent):
             output_content_type=OrderTacticianResponse,
             system_message=(
                 """당신은 주문 전술가입니다.
-주어진 매크로 리포트(macro_report), 펄스 리포트(pulse_report), 그리고 현재 포트폴리오 비율(portfolio_ratio)을 바탕으로, 코인(btc)에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
+    주어진 데이터를 바탕으로, 코인에 대한 적절한 주문(order)과 주문 수량(amount)을 결정하세요.
 
-### 입력 데이터 구조
-{
-    "macro_report": {
-        "trend_report" {
-            "trend": str,
-            "confidence": float,
+    ### 입력 데이터 구조
+    {
+        "macro_report": (object | null),
+        "pulse_report": (object | null),
+        "portfolio_ratio": object
+    }
+    - 각 report(macro_report, pulse_report)는 null일 수 있습니다.
+    - null인 경우, 해당 데이터가 제공되지 않은 상황임을 의미합니다.
+    - 제공된 데이터를 기준으로 주문을 결정해야 합니다.
+
+    (macro_report, pulse_report, portfolio_ratio가 null이 아닐 때의 구조는 아래와 같습니다.)
+
+    {
+        "macro_report": {
+            "trend_report": {
+                "trend": str,
+                "confidence": float,
+                "reason": str
+            },
+            "limit_report": {
+                "rate_limit": float,
+                "reason": str
+            }
+        },
+        "pulse_report": {
+            "pulse": str,
+            "strength": float,
             "reason": str
-        }
-        "limit_report": {
-            "rate_limit": float,
-            "reason": str
-        }
-    },
-    "pulse_report": {
-        "pulse": str,
-        "strength": float,
-        "reason": str
-    },
-    "portfolio_ratio": {
-        "cash": float,
-        "btc": float
-    },
-}
-- macro_report
-    - trend: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
-    - confidence: 추세 분류에 대한 신뢰도 (0.0 ~ 1.0)
-    - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
-- pulse_report
-    - pulse: 단기 시장 신호 (상승 돌파 / 하락 돌파 / 돌파 없음)
-    - strength: 해당 신호의 강도 (0.0 ~ 1.0)
-- portfolio_ratio
-    - cash: 현금 비율 (0.0 ~ 1.0)
-    - btc: 코인(btc) 비율 (0.0 ~ 1.0)
-    - 현금 비율과 코인(btc) 비율의 합은 항상 1.0.
+        },
+        "portfolio_ratio": {
+            "cash": float,
+            "코인명(e.g, 'btc', 'eth', 'xrp')": float
+        },
+    }
+    - macro_report
+        - trend: 거시적 시장 흐름 (ex, 상승장, 하락장, 횡보장)
+        - confidence: 추세 분류에 대한 신뢰도 (0.0 ~ 1.0)
+        - rate_limit: 코인에 투자 가능한 자산 최대 비율 (0.0 ~ 1.0)
+    - pulse_report
+        - pulse: 단기 시장 신호 (상승 돌파 / 하락 돌파 / 돌파 없음)
+        - strength: 해당 신호의 강도 (0.0 ~ 1.0)
+    - portfolio_ratio
+        - cash: 현금 비율 (0.0 ~ 1.0)
+        - 코인: 코인(코인) 비율 (0.0 ~ 1.0)
+        - 현금 비율과 코인(코인) 비율의 합은 항상 1.0.
 
 
-### 출력 데이터 구조
-{
-    "order": str,
-    "amount": float
-}
-- order: 수행할 주문 종류
-    - "buy": 매수
-    - "sell": 매도
-    - "hold": 보유
-- amount: 주문 수량
-    - hold일 경우 반드시 0.0
+    ### 출력 데이터 구조
+    {
+        "order": str,
+        "amount": float
+    }
+    - order: 수행할 주문 종류
+        - "buy": 매수
+        - "sell": 매도
+        - "hold": 보유
+    - amount: 주문 수량
+        - hold일 경우 반드시 0.0
 
-    
-### 주문 결정 규칙
-1. 매수("buy"):
-    - 코인 비중이 rate_limit보다 작을 때만 매수 가능
-    - 매수 가능 최대 수량은 rate_limit - 현재 btc 비율
-    - 매수하려는 amount는 보유한 cash보다 작거나 같아야 함
-2. 매도("sell"):
-    - 단순히 btc 비율 > rate_limit인 상황이라도 강제 매도하지 마세요
+        
+    ### 주문 결정 규칙
+    1. 매수("buy"):
+        - 코인 비중이 rate_limit보다 작을 때만 매수 가능
+        - 매수 가능 최대 수량은 rate_limit - 현재 코인 비율
+        - 매수하려는 amount는 보유한 cash보다 작거나 같아야 함
+    2. 매도("sell"):
+        - 단순히 코인 비율 > rate_limit인 상황이라도 강제 매도하지 마세요
         - 상승장 또는 강한 상승 돌파 시에는 초과 상태를 유지하며 hold 가능
-    - 매도는 오직 거시/미시 리포트가 하락을 강하게 시사할 때만 선택
-    - 매도하려는 amount는 보유한 btc보다 작거나 같아야 함
-3. 보유("hold"):
-    - 상승 시그널이 강하지만 이미 rate_limit을 초과한 경우 → 보유 유지
-    - 현금이 부족하여 매수를 못하는 경우 → 보유 유지
-    - btc가 없어서 매도를 못하는 경우 → 보유 유지
+        - 매도는 오직 거시/미시 리포트가 하락을 강하게 시사할 때만 선택
+        - 매도하려는 amount는 보유한 코인보다 작거나 같아야 함
+    3. 보유("hold"):
+        - 상승 시그널이 강하지만 이미 rate_limit을 초과한 경우 → 보유 유지
+        - 현금이 부족하여 매수를 못하는 경우 → 보유 유지
+        - 코인이 없어서 매도를 못하는 경우 → 보유 유지
 
-### 주문 검증 규칙
-- 매수 오류:
-    - 현금이 0일 때 매수 시도
-    - 매수 수량이 보유 현금보다 많을 경우
-- 매도 오류:
-    - btc가 0일 때 매도 시도
-    - 매도 수량이 보유 btc보다 많을 경우
+    ### 주문 검증 규칙
+    - 매수 오류:
+        - 현금이 0일 때 매수 시도
+        - 매수 수량이 보유 현금보다 많을 경우
+    - 매도 오류:
+        - 코인이 0일 때 매도 시도
+        - 매도 수량이 보유 코인보다 많을 경우
 
-### 예시
-- 매수 예
-    - 보유 btc: 0.4 / rate_limit: 0.5 -> 최대 매수 가능: 0.1
-- 매도 예 (정당한 사유 필요)
-    - 보유 btc: 0.5 / rate_limit: 0.3
+    ### 예시
+    - 매수 예
+        - 보유 코인: 0.4 / rate_limit: 0.5 -> 최대 매수 가능: 0.1
+    - 매도 예 (정당한 사유 필요)
+        - 보유 코인: 0.5 / rate_limit: 0.3
         - 단, 시장이 약세일 때만 매도 고려
         - 상승 시그널이면 hold 유지 가능
 
-### 예시 출력
-{ "order": "buy", "amount": 0.5 }
-{ "order": "sell", "amount": 0.2 }
-{ "order": "hold", "amount": 0.0 }
-"""
+    ### 예시 출력
+    { "order": "buy", "amount": 0.5 }
+    { "order": "sell", "amount": 0.2 }
+    { "order": "hold", "amount": 0.0 }
+    """
             ),
         )
 
     async def decide(
         self,
-        macro_report: Dict[str, Any],
-        pulse_report: Dict[str, Any],
+        macro_report: Union[Dict[str, Any], None],
+        pulse_report: Union[Dict[str, Any], None],
     ) -> Dict[str, Any]:
         report = {
             "macro_report": macro_report,
@@ -176,7 +187,11 @@ class OrderTactician(AssistantAgent):
                 cash_ratio = ratios.get("cash", 0.0)
                 coin_ratio = sum(v for k, v in ratios.items() if k != "cash")
 
-                rate_limit = macro_report["limit_report"]["rate_limit"]
+                rate_limit = (
+                    macro_report["limit_report"]["rate_limit"]
+                    if macro_report is not None
+                    else 1.0
+                )
 
                 # 추가 검증: buy 오류
                 if order == "buy":

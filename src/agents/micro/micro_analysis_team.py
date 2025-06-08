@@ -15,11 +15,11 @@ class MicroAnalysisTeam:
         fig: Any,
         macro_report: Dict[str, Any],
     ) -> Dict[str, Any]:
-        pulse_report = await self.pulse_detector.detect(price_data=price_data, fig=fig)
+        micro_report = await self.pulse_detector.detect(price_data=price_data, fig=fig)
 
         order_report = await self.order_tactician.decide(
-            macro_report=macro_report, pulse_report=pulse_report
+            macro_report=macro_report, micro_report=micro_report
         )
 
-        micro_report = {"pulse_report": pulse_report, "order_report": order_report}
+        micro_report = {"micro_report": micro_report, "order_report": order_report}
         return micro_report

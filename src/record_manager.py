@@ -6,9 +6,9 @@ import pandas as pd
 
 class RecordManager:
     def __init__(
-        self, coin: str, trend: str, report_type: str, only_macro: bool = False
+        self, coin: str, trend: str, report_type: str, system_mode: str = "full"
     ):
-        folder_path = "only_macro" if only_macro else "results"
+        folder_path = system_mode
 
         self.folder_path = os.path.abspath(
             os.path.join(
